@@ -1,0 +1,59 @@
+# AvatarDesk — Local Development Infrastructure
+#
+# Brings up Postgres (with pgvector) and Redis for local development.
+# Production deploys use managed services or Kubernetes manifests, not
+# this file.
+#
+# Usage:
+#   cp .env.example .env       # fill in any values you need
+#   docker compose up -d
+#
+# See docs/architecture/local-infra.md for details.
+
+name: avatardesk
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: avatardesk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: avatardesk
+      POSTGRES_PASSWORD: avatardesk
+      POSTGRES_DB: avatardesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./services/api/src/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avatardesk -d avatardesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - avatardesk
+
+  redis:
+    image: redis:7-alpine
+    container_name: avatardesk-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - avatardesk
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  avatardesk:
+    driver: bridge
