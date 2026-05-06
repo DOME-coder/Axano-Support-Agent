@@ -109,8 +109,15 @@ async def entrypoint(ctx: JobContext) -> None:
     # they would eagerly authenticate against their providers at init
     # and crash without those credentials. See PRD §10.2 for the
     # phase-1 pipeline rollout.
+    #
+    # The elevenlabs plugin reads ELEVEN_API_KEY (no S) from env by
+    # default; we pass our ELEVENLABS_API_KEY explicitly so all our
+    # ELEVENLABS_* vars stay consistently named.
     session = AgentSession(
-        tts=elevenlabs.TTS(voice_id=os.environ["ELEVENLABS_DEFAULT_VOICE_ID"]),
+        tts=elevenlabs.TTS(
+            voice_id=os.environ["ELEVENLABS_DEFAULT_VOICE_ID"],
+            api_key=os.environ["ELEVENLABS_API_KEY"],
+        ),
     )
 
     avatar = bey.AvatarSession(avatar_id=os.environ["BEY_DEFAULT_AVATAR_ID"])
