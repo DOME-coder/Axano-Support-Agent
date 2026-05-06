@@ -2,12 +2,15 @@
 
 This worker connects to a LiveKit room, attaches a Beyond Presence
 avatar, and has the avatar speak a fixed greeting message via
-ElevenLabs TTS. It does NOT yet listen for user speech or run the
-LLM — that arrives with Phase 1 sprint 2 (PRD §10.2).
+ElevenLabs TTS.
 
-The canonical Beyond-Presence + livekit-agents pattern follows
-CLAUDE.md §7. All credentials are read from the repo-root .env
-file via python-dotenv; nothing is hardcoded.
+Phase 0 is intentionally TTS-only: no STT, no LLM, no VAD. Those
+pipeline stages, plus tool-use and RAG, arrive in Phase 1 sprint 2
+(PRD §10.2). The full canonical pattern from CLAUDE.md §7 lands
+once the conversational loop is wired up.
+
+All credentials are read from the repo-root .env file via
+python-dotenv; nothing is hardcoded.
 """
 
 from __future__ import annotations
@@ -19,9 +22,8 @@ from pathlib import Path
 
 import structlog
 from dotenv import load_dotenv
-from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
-from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
+from livekit.plugins import bey, elevenlabs
 
 # Repo-root .env, two directories up from services/agent/main.py.
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -103,11 +105,12 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     log.info("connected to livekit room")
 
+    # Phase 0: TTS-only. STT, LLM and VAD are intentionally omitted —
+    # they would eagerly authenticate against their providers at init
+    # and crash without those credentials. See PRD §10.2 for the
+    # phase-1 pipeline rollout.
     session = AgentSession(
-        stt=deepgram.STT(model="nova-2", language="de"),
-        llm=anthropic.LLM(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")),
         tts=elevenlabs.TTS(voice_id=os.environ["ELEVENLABS_DEFAULT_VOICE_ID"]),
-        vad=silero.VAD.load(),
     )
 
     avatar = bey.AvatarSession(avatar_id=os.environ["BEY_DEFAULT_AVATAR_ID"])
