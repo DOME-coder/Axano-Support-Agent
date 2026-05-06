@@ -1,0 +1,119 @@
+# ─── Environment & Secrets ───────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+*.pem
+*.key
+*.cert
+secrets/
+.secrets/
+
+# ─── Node.js / pnpm / TypeScript ─────────────────────────
+node_modules/
+.pnpm-store/
+.pnp.*
+*.tsbuildinfo
+dist/
+build/
+out/
+.next/
+.turbo/
+.cache/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Python (Agent-Service) ──────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+htmlcov/
+.coverage
+.coverage.*
+nosetests.xml
+
+# ─── Datenbank ───────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+postgres-data/
+redis-data/
+pgdata/
+
+# ─── Frontend Builds & Static ────────────────────────────
+.parcel-cache/
+.vite/
+.svelte-kit/
+.vercel/
+.netlify/
+storybook-static/
+public/uploads/
+
+# ─── Editor / IDE ────────────────────────────────────────
+.vscode/*
+!.vscode/settings.example.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── Logs & Tempfiles ────────────────────────────────────
+logs/
+*.log
+tmp/
+temp/
+.tmp/
+
+# ─── Docker / Infra-Lokales ──────────────────────────────
+docker-compose.override.yml
+*.local.yml
+
+# ─── Test-Artefakte ──────────────────────────────────────
+playwright-report/
+test-results/
+test-output/
+.nyc_output/
+
+# ─── Beyond Presence / LiveKit / API-Sessions ────────────
+# (lokale Test-Recordings, falls je gespeichert)
+recordings/
+sessions/
+*.webm
+*.mp4
+!docs/**/*.mp4
+!docs/**/*.webm
+
+# ─── Diverses ────────────────────────────────────────────
+.history/
+*.bak
+*.orig
+.eslintcache
+.stylelintcache
