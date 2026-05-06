@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+pnpm-lock.yaml
+*.min.js
+*.min.css
+
+# Python — formatted by Black, not Prettier
+services/agent/
+
+# Generated migration files
+**/migrations/*.sql
