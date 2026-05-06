@@ -1,0 +1,28 @@
+[project]
+name = "avatardesk-agent"
+version = "0.0.0"
+description = "AvatarDesk realtime agent — orchestrates STT, LLM, TTS and Beyond Presence avatar streaming via livekit-agents."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary" }
+
+dependencies = [
+    "livekit-agents[anthropic,bey,deepgram,elevenlabs,silero]~=1.2",
+    "python-dotenv~=1.0",
+    "structlog~=24.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff~=0.7",
+    "black~=24.10",
+    "pytest~=8.3",
+    "pytest-asyncio~=0.24",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
