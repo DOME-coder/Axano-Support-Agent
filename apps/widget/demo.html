@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AvatarDesk Widget — Production-Bundle Demo</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+        margin: 0;
+        padding: 48px;
+        background: #f4f4f7;
+      }
+      .tenant-mock {
+        max-width: 720px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 12px;
+        padding: 32px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tenant-mock">
+      <h1>Production-Bundle-Test</h1>
+      <p>
+        Diese Seite testet das gebaute IIFE-Bundle aus
+        <code>dist/widget.js</code>. Sie simuliert exakt, was ein Tenant in
+        seine Webseite einbinden würde — ein einziger
+        <code>&lt;script&gt;</code>-Tag.
+      </p>
+      <p>
+        Vor dem Test: <code>pnpm --filter @avatardesk/widget build</code>,
+        dann <code>pnpm --filter @avatardesk/widget preview</code>, dann
+        Browser auf <code>/demo.html</code>.
+      </p>
+    </div>
+
+    <!--
+      Phase-0 token workaround. Siehe docs/decisions/003-phase-0-token-workaround.md.
+      In Phase 1 holt das Widget den Token serverseitig per
+      POST /api/widget-session und liest ihn NICHT mehr aus diesem Tag.
+    -->
+    <script
+      src="/dist/widget.js"
+      data-livekit-url="wss://REPLACE-WITH-YOUR-LIVEKIT-URL.livekit.cloud"
+      data-livekit-token="REPLACE-WITH-YOUR-LIVEKIT-TOKEN"
+    ></script>
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        window.AvatarDesk?.init();
+      });
+    </script>
+  </body>
+</html>

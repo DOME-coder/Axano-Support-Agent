@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AvatarDesk Widget — Dev</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+        margin: 0;
+        padding: 48px;
+        background: #f4f4f7;
+      }
+      .tenant-mock {
+        max-width: 720px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 12px;
+        padding: 32px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tenant-mock">
+      <h1>Beispiel-Tenant-Webseite</h1>
+      <p>
+        Diese Seite simuliert die Webseite eines AvatarDesk-Tenants. Das Widget
+        wird unten rechts als schwebender Button erscheinen, sobald die
+        Konfiguration vorhanden ist (LiveKit-URL und Token via Data-Attribute
+        oder über <code>window.AvatarDesk.init()</code>).
+      </p>
+      <p>
+        Im Dev-Modus initialisiert sich das Widget automatisch auf
+        <code>DOMContentLoaded</code>. Trage deine LiveKit-URL und einen
+        Test-Token in die <code>&lt;script&gt;</code>-Tags weiter unten ein,
+        bevor du den Browser öffnest.
+      </p>
+    </div>
+
+    <!--
+      Phase-0 token workaround. URL und Token werden hier hardcoded, damit der
+      Dev-Server ohne Backend funktioniert. Siehe docs/decisions/003-...
+      Im echten Tenant-Embed in Phase 0 stehen diese Werte als data-Attribute
+      auf dem <script src="widget.js">-Tag (siehe demo.html).
+    -->
+    <script type="module">
+      // Side-effect import: registers window.AvatarDesk.
+      import '/src/main.ts';
+      window.addEventListener('DOMContentLoaded', () => {
+        window.AvatarDesk?.init({
+          livekitUrl: 'wss://REPLACE-WITH-YOUR-LIVEKIT-URL.livekit.cloud',
+          livekitToken: 'REPLACE-WITH-YOUR-LIVEKIT-TOKEN',
+        });
+      });
+    </script>
+  </body>
+</html>
