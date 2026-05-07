@@ -168,11 +168,11 @@ Wenn du (Claude Code) eine Aufgabe bekommst:
 1. **Verstehen:** Lies die Issue / das Ticket. Wenn unklar → frag nach.
 2. **PRD-Check:** Suche im PRD nach dem relevanten Abschnitt. Halte dich daran.
 3. **Plan:** Skizziere, welche Dateien du anlegen / ändern wirst, bevor du Code schreibst. Bei größeren Aufgaben (>5 Dateien) zeig den Plan dem User vor der Umsetzung.
-4. **Implementieren:** Kleine, fokussierte Änderungen. Eine Aufgabe = ein Branch = ein PR.
+4. **Implementieren:** Kleine, fokussierte Änderungen. Direkt auf `main` committen — keine Feature-Branches, kein PR-Workflow. Begründung und Re-Evaluations-Bedingungen in [ADR 005](docs/decisions/005-direct-to-main-workflow.md).
 5. **Testen:** Lokal Tests laufen lassen. Wenn neu eingebauter Code nicht testbar ist, frag nach Refactoring.
 6. **Dokumentieren:** Wenn du eine Architektur-Entscheidung triffst, lege einen ADR in `docs/decisions/` an.
-7. **Committen:** Conventional Commits. Eine logische Änderung = ein Commit.
-8. **PR-Beschreibung:** was, warum, wie getestet. Verlinke das relevante PRD-Kapitel.
+7. **Committen:** Conventional Commits. Eine logische Änderung = ein Commit. Push auf `origin/main` nach User-Bestätigung.
+8. **CI:** Läuft auf jedem Push gegen `main`. Roter Lauf wird mit einem Folge-Commit gefixt, nicht durch Revert (außer der Schaden ist groß).
 
 ---
 
