@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel older runs of the same branch when a new push comes in.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck widget
+        run: pnpm --filter @avatardesk/widget typecheck
+
+      - name: Build widget
+        run: pnpm --filter @avatardesk/widget build
+
+  agent:
+    name: Agent (lint + syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: services/agent/.python-version
+
+      - name: Install ruff
+        # We do NOT install the full agent dependency tree on CI — the
+        # livekit-agents extras pull in heavy provider plugins (Silero
+        # VAD models, webrtc deps) that take minutes and add no value
+        # to a syntax+lint check. py_compile catches import-level
+        # syntax issues without the deps.
+        run: pip install "ruff~=0.7"
+
+      - name: Lint with ruff
+        run: ruff check services/agent
+
+      - name: Syntax check
+        run: python -m py_compile services/agent/main.py

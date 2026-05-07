@@ -43,46 +43,40 @@ avatardesk/
 
 ## Schnellstart (Entwicklung)
 
-> Voraussetzungen: Node.js ≥ 20, pnpm ≥ 9, Python ≥ 3.11, Docker, Beyond-Presence-Account.
+Vollständige, schrittweise Anleitung mit Provider-Setup,
+Token-Generierung und Troubleshooting:
+**[docs/architecture/phase-0-e2e.md](./docs/architecture/phase-0-e2e.md)**.
+
+Kurzfassung für jemanden, der die Anleitung schon kennt:
 
 ```bash
-# 1. Repo klonen
-git clone https://github.com/<your-org>/avatardesk.git
-cd avatardesk
-
-# 2. Abhängigkeiten installieren
-pnpm install
-
-# 3. Environment-Variablen konfigurieren
+# 1. .env anlegen und mit echten Werten befüllen
 cp .env.example .env
-# .env editieren und API-Keys eintragen (Beyond Presence, Claude, ElevenLabs, Deepgram, LiveKit)
 
-# 4. Lokale Infrastruktur starten (Postgres, Redis)
+# 2. Lokale Infra (Postgres + Redis) starten
 docker compose up -d
 
-# 5. Datenbank-Migrationen ausführen
-pnpm db:migrate
-
-# 6. Alle Services im Dev-Modus starten
-pnpm dev
-```
-
-Der Python-Agent läuft separat:
-
-```bash
+# 3. Python-Agent (in eigenem Terminal)
 cd services/agent
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 python main.py dev
+
+# 4. Widget-Dev-Server (in eigenem Terminal, Repo-Root)
+corepack pnpm install            # einmalig pro Klon
+corepack pnpm --filter @avatardesk/widget dev
 ```
+
+Browser auf `http://localhost:5173/` → Floating-Button →
+Beyond-Presence-Avatar spricht.
 
 ## Roadmap (Übersicht)
 
-- **Phase 0** (Wo. 1–2): Foundation – Repo, Infra, Beyond-Presence-Setup
-- **Phase 1** (Wo. 3–7): Core MVP – Widget + Agent + erste End-to-End-Konversation
-- **Phase 2** (Wo. 8–12): Bildschirm-Sharing + RAG + mehrsprachig
-- **Phase 3** (Wo. 13–20): Eskalation, CRM-Integrationen, Billing, GA-Launch
-- **Phase 4** (ab Monat 6): Mobile-SDKs, Outbound, WordPress/Shopify-Plugins
+- ✅ **Phase 0** — Foundation: Repo, Infra, Beyond-Presence-Hello-World, Widget-Skelett, CI. End-to-End-Demo verifiziert.
+- 🚧 **Phase 1** (Wo. 3–7) — Core MVP: Sprach-Loop (STT + LLM + TTS), RAG, Tenant-Auth, Token-Endpoint, erste echte Konversation.
+- **Phase 2** (Wo. 8–12) — Bildschirm-Sharing, Vision, mehrsprachig.
+- **Phase 3** (Wo. 13–20) — Eskalation, CRM-Integrationen, Billing, GA-Launch.
+- **Phase 4** (ab Monat 6) — Mobile-SDKs, Outbound, WordPress/Shopify-Plugins.
 
 Details in [PRD.md, Sektion 10](./PRD.md).
 
@@ -94,7 +88,9 @@ Details in [PRD.md, Sektion 10](./PRD.md).
 
 ## Status
 
-🚧 **In Entwicklung** — Phase 0 (Foundation).
+✅ **Phase 0 abgeschlossen** (2026-05-07) — Foundation steht, End-to-End-Demo läuft. Setup-Anleitung in [docs/architecture/phase-0-e2e.md](./docs/architecture/phase-0-e2e.md).
+
+🚧 **Aktuell:** Vorbereitung Phase 1 (Sprach-Loop + Tenant-Auth-Endpoint).
 
 ## Lizenz
 
