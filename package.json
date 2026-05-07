@@ -14,7 +14,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @avatardesk/api db:generate",
+    "db:migrate": "pnpm --filter @avatardesk/api db:migrate",
+    "db:studio": "pnpm --filter @avatardesk/api db:studio"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
