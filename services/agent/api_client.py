@@ -49,6 +49,14 @@ class AgentConfig:
     greeting: str
 
 
+@dataclass(frozen=True)
+class KnowledgeHit:
+    chunk_id: str
+    source_id: str
+    content: str
+    similarity: float
+
+
 class ApiClient:
     """Async HTTP client for the AvatarDesk internal API.
 
@@ -98,6 +106,36 @@ class ApiClient:
             response.raise_for_status()
         except Exception as exc:  # noqa: BLE001 — best-effort logging
             log.warning("failed to persist message", error=str(exc), role=role)
+
+    async def search_knowledge(
+        self,
+        tenant_id: str,
+        query: str,
+        top_k: int = 5,
+    ) -> list[KnowledgeHit]:
+        url = f"{self._base_url}/api/internal/knowledge/search"
+        params = {"tenant_id": tenant_id, "q": query, "top_k": str(top_k)}
+        try:
+            response = await self._client.get(url, params=params)
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("knowledge search failed", error=str(exc))
+            return []
+        data = response.json()
+        results = data.get("results", []) if isinstance(data, dict) else []
+        hits: list[KnowledgeHit] = []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            hits.append(
+                KnowledgeHit(
+                    chunk_id=str(item.get("chunkId", "")),
+                    source_id=str(item.get("sourceId", "")),
+                    content=str(item.get("content", "")),
+                    similarity=float(item.get("similarity", 0.0)),
+                )
+            )
+        return hits
 
     async def patch_conversation(
         self,

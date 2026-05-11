@@ -25,6 +25,7 @@ from pathlib import Path
 import structlog
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents.llm import function_tool
 from livekit.agents.voice.events import ConversationItemAddedEvent
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
@@ -73,11 +74,71 @@ def _validate_env() -> None:
     log.info("env validation ok", required_count=len(REQUIRED_ENV_VARS))
 
 
-class ConversationalAgent(Agent):
-    """Phase-1 conversational agent. Persona is injected per-conversation."""
+RAG_GROUNDING_HINT = (
+    "\n\nWICHTIG: Bei inhaltlichen Fragen rufst du IMMER zuerst das "
+    "Tool `search_knowledge_base` mit einer kurzen Suchanfrage auf. "
+    "Antworte ausschließlich basierend auf den zurückgegebenen Inhalten. "
+    "Wenn das Tool nichts Passendes findet, sag ehrlich, dass du es nicht "
+    "weißt — niemals erfinden."
+)
 
-    def __init__(self, instructions: str) -> None:
-        super().__init__(instructions=instructions)
+
+class ConversationalAgent(Agent):
+    """Phase-1 conversational agent with RAG tool.
+
+    Per-conversation persona instructions are extended with a fixed
+    grounding rule so the LLM uses search_knowledge_base before it
+    answers content questions. Tool implementation is injected via
+    the constructor — the tool itself is a thin closure over the
+    tenant id + api client.
+    """
+
+    def __init__(
+        self,
+        instructions: str,
+        *,
+        tenant_id: str | None,
+        api_client: ApiClient | None,
+    ) -> None:
+        self._tenant_id = tenant_id
+        self._api_client = api_client
+        # Only attach the rag tool when both pieces are present; in
+        # fallback mode (no metadata, no api) we keep the agent
+        # purely chatty and tell the llm explicitly that there's no
+        # knowledge base available.
+        tools = []
+        full_instructions = instructions
+        if tenant_id and api_client:
+            tools.append(self._build_search_tool(tenant_id, api_client))
+            full_instructions = instructions + RAG_GROUNDING_HINT
+        super().__init__(instructions=full_instructions, tools=tools)
+
+    @staticmethod
+    def _build_search_tool(tenant_id: str, api_client: ApiClient):
+        log = structlog.get_logger(__name__)
+
+        @function_tool(
+            name="search_knowledge_base",
+            description=(
+                "Durchsuche die Wissensdatenbank des Tenants und gib die "
+                "relevantesten Textauszüge zur Anfrage zurück. Nutze knappe, "
+                "präzise Suchanfragen — keine ganzen Sätze, sondern die "
+                "wichtigsten Begriffe."
+            ),
+        )
+        async def search_knowledge_base(query: str) -> str:
+            log.info("rag tool called", query_chars=len(query))
+            hits = await api_client.search_knowledge(tenant_id, query, top_k=5)
+            if not hits:
+                return "Keine relevanten Treffer in der Wissensdatenbank."
+            # Format as a numbered list so the LLM can cite content
+            # without confusing itself with delimiters.
+            lines: list[str] = []
+            for idx, hit in enumerate(hits, start=1):
+                lines.append(f"[{idx}] (sim={hit.similarity:.2f})\n{hit.content}")
+            return "\n\n".join(lines)
+
+        return search_knowledge_base
 
 
 def _extract_conversation_id(room_metadata: str | None) -> str | None:
@@ -198,7 +259,11 @@ async def entrypoint(ctx: JobContext) -> None:
     log.info("beyond-presence avatar attached")
 
     await session.start(
-        agent=ConversationalAgent(instructions=persona_prompt),
+        agent=ConversationalAgent(
+            instructions=persona_prompt,
+            tenant_id=cfg.tenant_id if cfg else None,
+            api_client=api_client,
+        ),
         room=ctx.room,
     )
     log.info("agent session started")
