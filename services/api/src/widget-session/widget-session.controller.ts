@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Inject,
+  Logger,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { CurrentTenant } from '../auth/current-tenant.decorator';
 import { TenantApiKeyGuard } from '../auth/tenant-api-key.guard';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
 import { avatarConfigs, conversations, type Tenant } from '../db/schema';
+import { RoomServiceClient } from '../livekit/room-service.factory';
 import { TokenIssuerService } from '../livekit/token-issuer.service';
 
 interface CreateWidgetSessionBody {
@@ -32,9 +34,12 @@ interface WidgetSessionResponse {
 @Controller('api/widget-session')
 @UseGuards(TenantApiKeyGuard)
 export class WidgetSessionController {
+  private readonly logger = new Logger(WidgetSessionController.name);
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DrizzleDB,
     private readonly tokenIssuer: TokenIssuerService,
+    private readonly rooms: RoomServiceClient,
   ) {}
 
   @Post()
@@ -74,6 +79,24 @@ export class WidgetSessionController {
       throw new HttpException(
         'failed to create conversation',
         HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // Pre-create the LiveKit room with conversationId in metadata so
+    // the agent can pull it from ctx.room.metadata and look up the
+    // tenant config via the internal api. Failures here are
+    // recoverable — LiveKit will lazily create the room on the
+    // first participant join, but then without our metadata, so we
+    // log and continue rather than 500ing the widget.
+    try {
+      await this.rooms.createRoom({
+        name: conversation.livekitRoomId,
+        metadata: JSON.stringify({ conversationId: conversation.id }),
+        emptyTimeout: 60,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `livekit createRoom failed for ${conversation.livekitRoomId}: ${(err as Error).message}`,
       );
     }
 

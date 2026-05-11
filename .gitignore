@@ -12,6 +12,8 @@ secrets/
 .secrets/
 .tenant-api-key.local
 *.api-key.local
+.internal-service-token.local
+.internal-service-token-hash.local
 
 # ─── Node.js / pnpm / TypeScript ─────────────────────────
 node_modules/

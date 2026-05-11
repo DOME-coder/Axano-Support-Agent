@@ -17,6 +17,11 @@ config({ path: resolve(REPO_ROOT, '.env') });
 
 import { avatarConfigs, tenants } from './schema';
 import { generateApiKey, hashApiKey } from '../auth/tenant-api-key.util';
+import {
+  generateInternalToken,
+  hashInternalToken,
+} from '../auth/internal-service.util';
+import { existsSync } from 'node:fs';
 
 const DEMO_TENANT_NAME = 'Axano';
 const DEMO_TENANT_EMAIL = 'team@axano.com';
@@ -96,6 +101,29 @@ async function seed(): Promise<void> {
   }
 
   await client.end();
+
+  // Internal service token: shared secret between api and agent for
+  // /api/internal/* endpoints. Generated once and persisted to a
+  // gitignored file at repo-root; the hash is stored in another
+  // gitignored file that the api reads via INTERNAL_SERVICE_TOKEN_HASH
+  // env. The plaintext also goes into .internal-service-token.local
+  // so the agent can read it on startup.
+  const internalTokenPath = resolve(REPO_ROOT, '.internal-service-token.local');
+  const internalHashPath = resolve(REPO_ROOT, '.internal-service-token-hash.local');
+  if (!existsSync(internalTokenPath) || !existsSync(internalHashPath)) {
+    const token = generateInternalToken();
+    writeFileSync(internalTokenPath, `${token}\n`, { encoding: 'utf8' });
+    chmodSync(internalTokenPath, 0o600);
+    writeFileSync(internalHashPath, `${hashInternalToken(token)}\n`, { encoding: 'utf8' });
+    chmodSync(internalHashPath, 0o600);
+    // eslint-disable-next-line no-console
+    console.log('  generated internal service token (.internal-service-token.local)');
+    // eslint-disable-next-line no-console
+    console.log('  → add INTERNAL_SERVICE_TOKEN_HASH=$(cat .internal-service-token-hash.local) to .env');
+  } else {
+    // eslint-disable-next-line no-console
+    console.log('  internal service token files already exist, skipping');
+  }
 
   if (printedKey) {
     // Never stdout-print the plaintext. Write to a gitignored file

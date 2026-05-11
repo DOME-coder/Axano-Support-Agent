@@ -10,6 +10,7 @@ dependencies = [
     "livekit-agents[anthropic,bey,deepgram,elevenlabs,silero]~=1.2",
     "python-dotenv~=1.0",
     "structlog~=24.4",
+    "httpx~=0.28",
 ]
 
 [project.optional-dependencies]
@@ -25,4 +26,4 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["main"]
+py-modules = ["main", "api_client"]

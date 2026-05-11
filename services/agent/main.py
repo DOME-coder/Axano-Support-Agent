@@ -1,31 +1,34 @@
-"""AvatarDesk realtime agent — Phase 1 Sprint 2: full conversational loop.
+"""AvatarDesk realtime agent — Phase 1 Sprint 2 + 1.2.3.
 
-This worker connects to a LiveKit room, attaches a Beyond Presence
-avatar, listens to the user via Deepgram STT, reasons with Claude,
-speaks back via ElevenLabs TTS, and renders lip-synced video
-through Beyond Presence.
+This worker connects to a LiveKit room, reads the conversation id
+from the room metadata (set by the api when issuing the widget
+session token), pulls the per-tenant avatar config from the
+internal api, attaches a Beyond Presence avatar, runs the full
+STT → LLM → TTS pipeline, and persists each turn back to the api.
 
-Persona (instructions + greeting) is currently read from env. The
-DB-driven per-tenant lookup arrives with task 1.2.3
-(Conversation-Persistence + Tenant-Avatar-Lookup).
-
-All credentials are read from the repo-root .env file via
-python-dotenv; nothing is hardcoded. Plugins eagerly authenticate
-at construction time, so any missing key crashes the worker on
-the first job dispatch — fail-fast in _validate_env covers that.
+Persona, voice and avatar id are all driven by the tenant's
+avatar_config row — no more env defaults at conversation time.
+Env-level defaults exist only as a last-resort fallback if the
+metadata is missing (development convenience).
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import structlog
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents.voice.events import ConversationItemAddedEvent
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
+
+from api_client import AgentConfig, ApiClient
 
 # Repo-root .env, two directories up from services/agent/main.py.
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -44,25 +47,8 @@ REQUIRED_ENV_VARS = (
     "DEEPGRAM_API_KEY",
 )
 
-DEFAULT_GREETING_INSTRUCTIONS = (
-    "Begrüße den Endkunden kurz auf Deutsch, stelle dich als Sofia "
-    "vor und frage, wobei du helfen kannst. Halte es unter 15 Wörtern."
-)
-
-DEFAULT_PERSONA_PROMPT = (
-    "Du bist Sofia, eine freundliche, kompetente "
-    "Customer-Service-Mitarbeiterin von Axano. Du sprichst Deutsch, "
-    "antwortest knapp und praktisch, und gibst zu, wenn du etwas "
-    "nicht weißt."
-)
-
 
 def _configure_logging() -> None:
-    """Configure structlog for human-readable dev logs.
-
-    Production deployments will switch to JSON renderer; for Phase 1
-    we want readable console output.
-    """
     logging.basicConfig(
         level=os.getenv("AGENT_LOG_LEVEL", "INFO"),
         format="%(message)s",
@@ -79,11 +65,6 @@ def _configure_logging() -> None:
 
 
 def _validate_env() -> None:
-    """Fail fast if any required credential is missing.
-
-    Logs which variables are missing by name only — never the value.
-    CLAUDE §6 + §11.
-    """
     log = structlog.get_logger()
     missing = [name for name in REQUIRED_ENV_VARS if not os.getenv(name)]
     if missing:
@@ -93,60 +74,160 @@ def _validate_env() -> None:
 
 
 class ConversationalAgent(Agent):
-    """Phase-1 conversational agent.
+    """Phase-1 conversational agent. Persona is injected per-conversation."""
 
-    Persona comes from AGENT_PERSONA_PROMPT (env) for now. Task 1.2.3
-    will swap this for a DB lookup driven by avatar_configs.persona_prompt.
-    """
+    def __init__(self, instructions: str) -> None:
+        super().__init__(instructions=instructions)
 
-    def __init__(self) -> None:
-        super().__init__(
-            instructions=os.getenv("AGENT_PERSONA_PROMPT", DEFAULT_PERSONA_PROMPT),
-        )
+
+def _extract_conversation_id(room_metadata: str | None) -> str | None:
+    """Pull the conversationId from the LiveKit room metadata if present."""
+    if not room_metadata:
+        return None
+    try:
+        parsed = json.loads(room_metadata)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    cid = parsed.get("conversationId") if isinstance(parsed, dict) else None
+    return cid if isinstance(cid, str) and cid else None
+
+
+def _flatten_content(content: object) -> str:
+    """ChatMessage.content is a list of ChatContent items (text, image, ...).
+    For persistence we keep only the text parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+        return " ".join(parts).strip()
+    return ""
 
 
 async def entrypoint(ctx: JobContext) -> None:
-    """LiveKit worker entrypoint.
-
-    Called for every room the worker is dispatched to.
-    """
     log = structlog.get_logger().bind(room=ctx.room.name)
     log.info("agent dispatched to room")
 
     await ctx.connect()
     log.info("connected to livekit room")
 
-    # Full STT->LLM->TTS->avatar pipeline. Each plugin authenticates
-    # at construction; if any key is missing the worker crashes here,
-    # which is why _validate_env runs at startup.
+    conversation_id = _extract_conversation_id(ctx.room.metadata)
+    if conversation_id:
+        log.info("conversation id from room metadata", conversation_id=conversation_id)
+    else:
+        log.warning("no conversation id in room metadata; falling back to env defaults")
+
+    # Pull per-conversation config from the internal api. If the
+    # conversationId is missing we run with env defaults — useful
+    # during development and for self-tests without an api round trip.
+    api_client: ApiClient | None = None
+    cfg: AgentConfig | None = None
+    if conversation_id:
+        try:
+            api_client = ApiClient()
+            cfg = await api_client.get_agent_config(conversation_id)
+            log.info(
+                "tenant config loaded",
+                tenant_id=cfg.tenant_id,
+                language=cfg.language,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.error("failed to load agent config; falling back to env defaults", error=str(exc))
+            if api_client:
+                await api_client.close()
+                api_client = None
+
+    bey_avatar_id = cfg.bey_avatar_id if cfg else os.environ["BEY_DEFAULT_AVATAR_ID"]
+    voice_id = cfg.elevenlabs_voice_id if cfg else os.environ["ELEVENLABS_DEFAULT_VOICE_ID"]
+    persona_prompt = (
+        cfg.persona_prompt
+        if cfg
+        else os.getenv(
+            "AGENT_PERSONA_PROMPT",
+            "Du bist Sofia, eine freundliche, kompetente "
+            "Customer-Service-Mitarbeiterin von Axano. Du sprichst Deutsch.",
+        )
+    )
+    greeting_text = (
+        cfg.greeting
+        if cfg
+        else os.getenv(
+            "AGENT_GREETING_TEXT",
+            "Hallo, ich bin Sofia. Wobei kann ich dir helfen?",
+        )
+    )
+    language = cfg.language if cfg else "de"
+
     session = AgentSession(
-        stt=deepgram.STT(
-            model=os.getenv("DEEPGRAM_MODEL", "nova-2"),
-            language="de",
-        ),
-        llm=anthropic.LLM(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-        ),
+        stt=deepgram.STT(model=os.getenv("DEEPGRAM_MODEL", "nova-2"), language=language),
+        llm=anthropic.LLM(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")),
         tts=elevenlabs.TTS(
-            voice_id=os.environ["ELEVENLABS_DEFAULT_VOICE_ID"],
+            voice_id=voice_id,
             api_key=os.environ["ELEVENLABS_API_KEY"],
         ),
         vad=silero.VAD.load(),
     )
 
-    avatar = bey.AvatarSession(avatar_id=os.environ["BEY_DEFAULT_AVATAR_ID"])
+    # Persist every user/assistant turn. The event fires once per
+    # committed conversation item; tool calls are excluded here (we
+    # log them in phase-2 analytics).
+    if api_client and conversation_id:
+
+        def _persist_item(event: ConversationItemAddedEvent) -> None:
+            item = event.item
+            role = getattr(item, "role", None)
+            if role not in ("user", "assistant"):
+                return
+            content = _flatten_content(getattr(item, "content", None))
+            if not content:
+                return
+            asyncio.create_task(
+                api_client.append_message(  # type: ignore[union-attr]
+                    conversation_id=conversation_id,
+                    role=role,
+                    content=content,
+                )
+            )
+
+        session.on("conversation_item_added", _persist_item)
+
+    avatar = bey.AvatarSession(avatar_id=bey_avatar_id)
     await avatar.start(session, room=ctx.room)
     log.info("beyond-presence avatar attached")
 
-    await session.start(agent=ConversationalAgent(), room=ctx.room)
+    await session.start(
+        agent=ConversationalAgent(instructions=persona_prompt),
+        room=ctx.room,
+    )
     log.info("agent session started")
 
-    greeting_instructions = os.getenv(
-        "AGENT_GREETING_INSTRUCTIONS",
-        DEFAULT_GREETING_INSTRUCTIONS,
-    )
-    await session.generate_reply(instructions=greeting_instructions)
-    log.info("initial greeting generated")
+    # The greeting from the tenant config is a final string, not an
+    # instruction. We give the LLM that exact greeting via say() so
+    # the persona stays consistent across reconnects.
+    await session.say(greeting_text, allow_interruptions=False)
+    log.info("greeting spoken", chars=len(greeting_text))
+
+    # Shutdown hook: stamp ended_at and rough bey-minutes onto the
+    # conversation row. Bey-minutes-used is an approximation based on
+    # wall-clock duration; phase-3 billing will swap this for exact
+    # streamed-minutes from the bey api.
+    started_at = time.monotonic()
+    if api_client and conversation_id:
+
+        async def _on_shutdown() -> None:
+            elapsed_min = round((time.monotonic() - started_at) / 60.0, 2)
+            try:
+                await api_client.patch_conversation(  # type: ignore[union-attr]
+                    conversation_id,
+                    ended_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    bey_minutes_used=elapsed_min,
+                )
+            finally:
+                await api_client.close()  # type: ignore[union-attr]
+
+        ctx.add_shutdown_callback(_on_shutdown)
 
 
 if __name__ == "__main__":
