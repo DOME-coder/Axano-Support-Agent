@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { AvatarConfigModule } from './avatar-config/avatar-config.module';
 import { DashboardAuthModule } from './dashboard-auth/dashboard-auth.module';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
@@ -22,6 +23,7 @@ import { WidgetSessionModule } from './widget-session/widget-session.module';
     StorageModule,
     KnowledgeModule,
     DashboardAuthModule,
+    AvatarConfigModule,
   ],
 })
 export class AppModule {}

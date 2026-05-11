@@ -11,6 +11,7 @@
     "lint": "echo 'lint wired up in phase 2'"
   },
   "dependencies": {
+    "@avatardesk/shared": "workspace:*",
     "@tanstack/react-query": "^5.66.0",
     "next": "^14.2.35",
     "react": "^18.3.1",

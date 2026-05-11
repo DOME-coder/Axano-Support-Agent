@@ -20,6 +20,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@avatardesk/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.100.9(react@18.3.1)
@@ -80,8 +83,21 @@ importers:
         specifier: ^5.4.11
         version: 5.4.21(@types/node@22.19.17)(terser@5.47.0)
 
+  packages/shared:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   services/api:
     dependencies:
+      '@avatardesk/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@nestjs/common':
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -121,6 +137,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.4.9
