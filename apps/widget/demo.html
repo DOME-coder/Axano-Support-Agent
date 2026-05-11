@@ -39,14 +39,16 @@
     </div>
 
     <!--
-      Phase-0 token workaround. Siehe docs/decisions/003-phase-0-token-workaround.md.
-      In Phase 1 holt das Widget den Token serverseitig per
-      POST /api/widget-session und liest ihn NICHT mehr aus diesem Tag.
+      Phase-1 embed: the widget fetches its LiveKit token from the
+      AvatarDesk API on modal-open. The token never lives in the DOM.
+      The X-Tenant-API-Key is public per embed-domain and protected
+      by CORS allow-list + per-tenant rate limit on the api side.
+      See docs/decisions/003-phase-0-token-workaround.md (now resolved).
     -->
     <script
       src="/dist/widget.js"
-      data-livekit-url="wss://REPLACE-WITH-YOUR-LIVEKIT-URL.livekit.cloud"
-      data-livekit-token="REPLACE-WITH-YOUR-LIVEKIT-TOKEN"
+      data-api-url="http://localhost:3000"
+      data-tenant-api-key="REPLACE-WITH-YOUR-TENANT-API-KEY"
     ></script>
     <script>
       window.addEventListener('DOMContentLoaded', () => {

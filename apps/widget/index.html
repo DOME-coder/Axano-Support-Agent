@@ -23,6 +23,11 @@
       h1 {
         margin-top: 0;
       }
+      code {
+        background: #f0f0f4;
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
     </style>
   </head>
   <body>
@@ -30,31 +35,26 @@
       <h1>Beispiel-Tenant-Webseite</h1>
       <p>
         Diese Seite simuliert die Webseite eines AvatarDesk-Tenants. Das Widget
-        wird unten rechts als schwebender Button erscheinen, sobald die
-        Konfiguration vorhanden ist (LiveKit-URL und Token via Data-Attribute
-        oder über <code>window.AvatarDesk.init()</code>).
+        erscheint unten rechts als schwebender Button. Beim Klick öffnet sich
+        das Modal und das Widget holt seinen LiveKit-Token von der lokalen
+        AvatarDesk-API (<code>http://localhost:3000/api/widget-session</code>).
       </p>
       <p>
-        Im Dev-Modus initialisiert sich das Widget automatisch auf
-        <code>DOMContentLoaded</code>. Trage deine LiveKit-URL und einen
-        Test-Token in die <code>&lt;script&gt;</code>-Tags weiter unten ein,
-        bevor du den Browser öffnest.
+        Vor dem Test:
+        <code>corepack pnpm --filter @avatardesk/api start:dev</code> in einem
+        anderen Terminal starten, und im
+        <code>init()</code>-Aufruf unten den Tenant-API-Key eintragen, den der
+        Seed-Lauf in <code>.tenant-api-key.local</code> abgelegt hat.
       </p>
     </div>
 
-    <!--
-      Phase-0 token workaround. URL und Token werden hier hardcoded, damit der
-      Dev-Server ohne Backend funktioniert. Siehe docs/decisions/003-...
-      Im echten Tenant-Embed in Phase 0 stehen diese Werte als data-Attribute
-      auf dem <script src="widget.js">-Tag (siehe demo.html).
-    -->
     <script type="module">
       // Side-effect import: registers window.AvatarDesk.
       import '/src/main.ts';
       window.addEventListener('DOMContentLoaded', () => {
         window.AvatarDesk?.init({
-          livekitUrl: 'wss://REPLACE-WITH-YOUR-LIVEKIT-URL.livekit.cloud',
-          livekitToken: 'REPLACE-WITH-YOUR-LIVEKIT-TOKEN',
+          apiUrl: 'http://localhost:3000',
+          tenantApiKey: 'REPLACE-WITH-CONTENT-OF-.tenant-api-key.local',
         });
       });
     </script>

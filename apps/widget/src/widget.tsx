@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { connect, type ConnectionState, type RoomHandle } from './livekit-client';
+import { fetchWidgetSession } from './session';
 import { t, type StringKey } from './strings';
 
 interface WidgetProps {
-  livekitUrl: string;
-  livekitToken: string;
+  apiUrl: string;
+  tenantApiKey: string;
 }
 
 const STATUS_LABEL: Record<ConnectionState, StringKey> = {
@@ -27,29 +28,39 @@ export function Widget(props: WidgetProps) {
     let cancelled = false;
     const videoEl = videoRef.current;
 
-    connect({
-      url: props.livekitUrl,
-      token: props.livekitToken,
-      videoElement: videoEl,
-      onState: (s) => {
-        if (!cancelled) {
-          setState(s);
-        }
-      },
-    })
-      .then((handle) => {
+    setState('connecting');
+
+    (async () => {
+      try {
+        const session = await fetchWidgetSession({
+          apiUrl: props.apiUrl,
+          tenantApiKey: props.tenantApiKey,
+        });
         if (cancelled) {
-          handle.disconnect();
+          return;
+        }
+        const handle = await connect({
+          url: session.url,
+          token: session.token,
+          videoElement: videoEl,
+          onState: (s) => {
+            if (!cancelled) {
+              setState(s);
+            }
+          },
+        });
+        if (cancelled) {
+          await handle.disconnect();
           return;
         }
         handleRef.current = handle;
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) {
-          console.error('AvatarDesk: failed to connect', err);
+          console.error('AvatarDesk: failed to start session', err);
           setState('error');
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -59,7 +70,7 @@ export function Widget(props: WidgetProps) {
       }
       setState('idle');
     };
-  }, [open, props.livekitUrl, props.livekitToken]);
+  }, [open, props.apiUrl, props.tenantApiKey]);
 
   return (
     <div class="avatardesk-root">

@@ -1,8 +1,34 @@
 # ADR 003 — Phase-0 Token-Workaround im Widget
 
-**Status:** Akzeptiert für Phase 0; **muss** in Phase 1 Sprint 1 ersetzt werden
-**Datum:** 2026-05-06
+**Status:** Aufgehoben am 2026-05-11 durch Phase-1-Sprint-1
+**Datum (Erst-Erstellung):** 2026-05-06
+**Datum (Aufhebung):** 2026-05-11
 **Entscheider:** Projekt-Owner
+
+> **Auflösung:** Die fünf in dieser ADR genannten Sicherheits-
+> Probleme (DOM-Token-Leak, Room-Hijacking, lange Token-Lifetime,
+> fehlende Tenant-Identität, DSGVO-Implikation) sind durch den
+> serverseitigen `POST /api/widget-session`-Endpoint aus
+> Phase 1 Sprint 1 (Commit `02773fd`) und das Widget-Refactor
+> aus Sprint 1.1.5 (siehe Commit-Historie ab 2026-05-11) gelöst.
+> Tokens leben nicht mehr im DOM, sind Conversation-spezifisch,
+> haben 60-Minuten-TTL und sind durch den Tenant-API-Key
+> abgesichert. Die in der ursprünglichen Acceptance-Criteria-
+> Liste genannten fünf Punkte sind alle erfüllt:
+>
+> 1. ✅ `POST /api/widget-session` existiert und ist
+>    tenant-authentifiziert.
+> 2. ✅ Widget liest Token ausschließlich aus dem JSON-Response
+>    dieses Endpoints; kein Fallback auf
+>    `<script>`-Data-Attribute mehr.
+> 3. ✅ Die hardcoded `console.warn`-Mitigation ist entfernt.
+> 4. ✅ Die „DO NOT SHIP"-Warnung im README ist durch Standard-
+>    Setup-Doku ersetzt.
+> 5. Integrations-Test für 401-ohne-Header steht aus (Sprint-Anschluss-Task,
+>    blockiert nicht).
+>
+> Die folgenden Sektionen bleiben aus historischen Gründen
+> erhalten.
 
 ---
 

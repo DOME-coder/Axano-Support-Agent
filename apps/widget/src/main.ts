@@ -11,32 +11,25 @@ declare global {
 }
 
 interface InitOptions {
-  livekitUrl?: string;
-  livekitToken?: string;
+  apiUrl?: string;
+  tenantApiKey?: string;
 }
 
-interface ResolvedConfig {
-  livekitUrl: string;
-  livekitToken: string;
+export interface ResolvedConfig {
+  apiUrl: string;
+  tenantApiKey: string;
 }
-
-const PHASE_0_TOKEN_WARNING = [
-  'AvatarDesk: phase-0 token mode active, do not use in production.',
-  'See docs/decisions/003-phase-0-token-workaround.md for the safe',
-  'phase-1 pattern (POST /api/widget-session with tenant auth and',
-  'short-lived per-conversation tokens).',
-].join(' ');
 
 function readScriptDataAttrs(): Partial<ResolvedConfig> {
   const script = document.currentScript as HTMLScriptElement | null;
   if (!script) {
     return {};
   }
-  const url = script.dataset.livekitUrl;
-  const token = script.dataset.livekitToken;
+  const apiUrl = script.dataset.apiUrl;
+  const tenantApiKey = script.dataset.tenantApiKey;
   return {
-    ...(url ? { livekitUrl: url } : {}),
-    ...(token ? { livekitToken: token } : {}),
+    ...(apiUrl ? { apiUrl } : {}),
+    ...(tenantApiKey ? { tenantApiKey } : {}),
   };
 }
 
@@ -45,19 +38,15 @@ function readScriptDataAttrs(): Partial<ResolvedConfig> {
 const SCRIPT_DEFAULTS = readScriptDataAttrs();
 
 function resolveConfig(options?: InitOptions): ResolvedConfig | null {
-  const livekitUrl = options?.livekitUrl ?? SCRIPT_DEFAULTS.livekitUrl;
-  const livekitToken = options?.livekitToken ?? SCRIPT_DEFAULTS.livekitToken;
-  if (!livekitUrl || !livekitToken) {
+  const apiUrl = options?.apiUrl ?? SCRIPT_DEFAULTS.apiUrl;
+  const tenantApiKey = options?.tenantApiKey ?? SCRIPT_DEFAULTS.tenantApiKey;
+  if (!apiUrl || !tenantApiKey) {
     console.error(
-      'AvatarDesk: missing livekitUrl or livekitToken. Pass them via init() or as data-livekit-url / data-livekit-token on the <script> tag.',
+      'AvatarDesk: missing apiUrl or tenantApiKey. Pass them via init() or as data-api-url / data-tenant-api-key on the <script> tag.',
     );
     return null;
   }
-  // Phase-0 only safety warning (see ADR 003). The console.warn fires
-  // on every init(), so it is hard for this token-leak pattern to ship
-  // unnoticed.
-  console.warn(PHASE_0_TOKEN_WARNING);
-  return { livekitUrl, livekitToken };
+  return { apiUrl: apiUrl.replace(/\/$/, ''), tenantApiKey };
 }
 
 function init(options?: InitOptions): void {
