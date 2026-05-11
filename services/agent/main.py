@@ -1,16 +1,18 @@
-"""AvatarDesk realtime agent — Phase 0 Hello-World.
+"""AvatarDesk realtime agent — Phase 1 Sprint 2: full conversational loop.
 
 This worker connects to a LiveKit room, attaches a Beyond Presence
-avatar, and has the avatar speak a fixed greeting message via
-ElevenLabs TTS.
+avatar, listens to the user via Deepgram STT, reasons with Claude,
+speaks back via ElevenLabs TTS, and renders lip-synced video
+through Beyond Presence.
 
-Phase 0 is intentionally TTS-only: no STT, no LLM, no VAD. Those
-pipeline stages, plus tool-use and RAG, arrive in Phase 1 sprint 2
-(PRD §10.2). The full canonical pattern from CLAUDE.md §7 lands
-once the conversational loop is wired up.
+Persona (instructions + greeting) is currently read from env. The
+DB-driven per-tenant lookup arrives with task 1.2.3
+(Conversation-Persistence + Tenant-Avatar-Lookup).
 
 All credentials are read from the repo-root .env file via
-python-dotenv; nothing is hardcoded.
+python-dotenv; nothing is hardcoded. Plugins eagerly authenticate
+at construction time, so any missing key crashes the worker on
+the first job dispatch — fail-fast in _validate_env covers that.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from pathlib import Path
 import structlog
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
-from livekit.plugins import bey, elevenlabs
+from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
 # Repo-root .env, two directories up from services/agent/main.py.
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -38,15 +40,27 @@ REQUIRED_ENV_VARS = (
     "LIVEKIT_API_SECRET",
     "ELEVENLABS_API_KEY",
     "ELEVENLABS_DEFAULT_VOICE_ID",
+    "ANTHROPIC_API_KEY",
+    "DEEPGRAM_API_KEY",
 )
 
-DEFAULT_GREETING = "Hallo, ich bin Sofia. Wobei kann ich dir helfen?"
+DEFAULT_GREETING_INSTRUCTIONS = (
+    "Begrüße den Endkunden kurz auf Deutsch, stelle dich als Sofia "
+    "vor und frage, wobei du helfen kannst. Halte es unter 15 Wörtern."
+)
+
+DEFAULT_PERSONA_PROMPT = (
+    "Du bist Sofia, eine freundliche, kompetente "
+    "Customer-Service-Mitarbeiterin von Axano. Du sprichst Deutsch, "
+    "antwortest knapp und praktisch, und gibst zu, wenn du etwas "
+    "nicht weißt."
+)
 
 
 def _configure_logging() -> None:
     """Configure structlog for human-readable dev logs.
 
-    Production deployments will switch to JSON renderer; for Phase 0
+    Production deployments will switch to JSON renderer; for Phase 1
     we want readable console output.
     """
     logging.basicConfig(
@@ -78,19 +92,16 @@ def _validate_env() -> None:
     log.info("env validation ok", required_count=len(REQUIRED_ENV_VARS))
 
 
-class GreetingAgent(Agent):
-    """Phase 0 stub: speaks once, then idles.
+class ConversationalAgent(Agent):
+    """Phase-1 conversational agent.
 
-    Phase 1 will replace this with a full conversational agent that
-    handles STT input and LLM tool-use (PRD §4.1.7).
+    Persona comes from AGENT_PERSONA_PROMPT (env) for now. Task 1.2.3
+    will swap this for a DB lookup driven by avatar_configs.persona_prompt.
     """
 
     def __init__(self) -> None:
         super().__init__(
-            instructions=(
-                "Du bist Sofia, eine freundliche, kompetente "
-                "Customer-Service-Mitarbeiterin. Du sprichst Deutsch."
-            ),
+            instructions=os.getenv("AGENT_PERSONA_PROMPT", DEFAULT_PERSONA_PROMPT),
         )
 
 
@@ -105,31 +116,37 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     log.info("connected to livekit room")
 
-    # Phase 0: TTS-only. STT, LLM and VAD are intentionally omitted —
-    # they would eagerly authenticate against their providers at init
-    # and crash without those credentials. See PRD §10.2 for the
-    # phase-1 pipeline rollout.
-    #
-    # The elevenlabs plugin reads ELEVEN_API_KEY (no S) from env by
-    # default; we pass our ELEVENLABS_API_KEY explicitly so all our
-    # ELEVENLABS_* vars stay consistently named.
+    # Full STT->LLM->TTS->avatar pipeline. Each plugin authenticates
+    # at construction; if any key is missing the worker crashes here,
+    # which is why _validate_env runs at startup.
     session = AgentSession(
+        stt=deepgram.STT(
+            model=os.getenv("DEEPGRAM_MODEL", "nova-2"),
+            language="de",
+        ),
+        llm=anthropic.LLM(
+            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        ),
         tts=elevenlabs.TTS(
             voice_id=os.environ["ELEVENLABS_DEFAULT_VOICE_ID"],
             api_key=os.environ["ELEVENLABS_API_KEY"],
         ),
+        vad=silero.VAD.load(),
     )
 
     avatar = bey.AvatarSession(avatar_id=os.environ["BEY_DEFAULT_AVATAR_ID"])
     await avatar.start(session, room=ctx.room)
     log.info("beyond-presence avatar attached")
 
-    await session.start(agent=GreetingAgent(), room=ctx.room)
+    await session.start(agent=ConversationalAgent(), room=ctx.room)
     log.info("agent session started")
 
-    greeting = os.getenv("AGENT_GREETING_TEXT", DEFAULT_GREETING)
-    await session.say(greeting, allow_interruptions=False)
-    log.info("greeting spoken", chars=len(greeting))
+    greeting_instructions = os.getenv(
+        "AGENT_GREETING_INSTRUCTIONS",
+        DEFAULT_GREETING_INSTRUCTIONS,
+    )
+    await session.generate_reply(instructions=greeting_instructions)
+    log.info("initial greeting generated")
 
 
 if __name__ == "__main__":

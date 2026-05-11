@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { connect, type ConnectionState, type RoomHandle } from './livekit-client';
+import {
+  connect,
+  type AgentState,
+  type ConnectionState,
+  type RoomHandle,
+} from './livekit-client';
 import { fetchWidgetSession } from './session';
 import { t, type StringKey } from './strings';
 
@@ -11,13 +16,24 @@ interface WidgetProps {
 const STATUS_LABEL: Record<ConnectionState, StringKey> = {
   idle: 'status.idle',
   connecting: 'status.connecting',
+  'requesting-permission': 'status.requestingPermission',
   connected: 'status.connected',
   error: 'status.error',
+};
+
+const AGENT_STATE_LABEL: Record<Exclude<AgentState, 'idle'>, StringKey> = {
+  listening: 'agent.listening',
+  speaking: 'agent.speaking',
 };
 
 export function Widget(props: WidgetProps) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ConnectionState>('idle');
+  const [agentState, setAgentState] = useState<AgentState>('idle');
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micError, setMicError] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const handleRef = useRef<RoomHandle | null>(null);
 
@@ -29,6 +45,7 @@ export function Widget(props: WidgetProps) {
     const videoEl = videoRef.current;
 
     setState('connecting');
+    setMicError(null);
 
     (async () => {
       try {
@@ -48,12 +65,42 @@ export function Widget(props: WidgetProps) {
               setState(s);
             }
           },
+          onAgentState: (s) => {
+            if (!cancelled) {
+              setAgentState(s);
+            }
+          },
+          onMicLevel: (level) => {
+            if (!cancelled) {
+              setMicLevel(level);
+            }
+          },
         });
         if (cancelled) {
           await handle.disconnect();
           return;
         }
         handleRef.current = handle;
+
+        // Auto-enable microphone after the room is up so the user can
+        // start speaking without a second click. If the browser denies
+        // the permission we surface a localized hint and keep the mic
+        // off — the avatar still plays, the user just can't reply.
+        try {
+          setState('requesting-permission');
+          await handle.setMicrophoneEnabled(true);
+          if (!cancelled) {
+            setMicEnabled(true);
+            setState('connected');
+          }
+        } catch (err) {
+          if (!cancelled) {
+            console.error('AvatarDesk: microphone permission denied', err);
+            setMicError(t('mic.permissionDenied'));
+            setMicEnabled(false);
+            setState('connected');
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           console.error('AvatarDesk: failed to start session', err);
@@ -69,8 +116,31 @@ export function Widget(props: WidgetProps) {
         handleRef.current = null;
       }
       setState('idle');
+      setAgentState('idle');
+      setMicEnabled(false);
+      setMicLevel(0);
+      setMicError(null);
     };
   }, [open, props.apiUrl, props.tenantApiKey]);
+
+  const toggleMic = async () => {
+    if (!handleRef.current) {
+      return;
+    }
+    try {
+      const next = !micEnabled;
+      await handleRef.current.setMicrophoneEnabled(next);
+      setMicEnabled(next);
+      setMicError(null);
+    } catch (err) {
+      console.error('AvatarDesk: microphone toggle failed', err);
+      setMicError(t('mic.permissionDenied'));
+    }
+  };
+
+  const fillPct = Math.min(100, Math.round(micLevel * 200));
+  const agentStateLabel =
+    agentState === 'idle' ? null : t(AGENT_STATE_LABEL[agentState]);
 
   return (
     <div class="avatardesk-root">
@@ -97,12 +167,34 @@ export function Widget(props: WidgetProps) {
           </div>
           <div class="avatardesk-modal__video">
             <video ref={videoRef} autoPlay playsInline />
-            {state !== 'connected' && (
+            {state !== 'connected' && state !== 'requesting-permission' && (
               <span class="avatardesk-modal__placeholder">
                 {t('placeholder.waitingForAvatar')}
               </span>
             )}
           </div>
+          {state === 'connected' && (
+            <div class="avatardesk-modal__controls">
+              <button
+                class="avatardesk-modal__mic-btn"
+                aria-label={micEnabled ? t('mic.disable') : t('mic.enable')}
+                aria-pressed={micEnabled}
+                onClick={toggleMic}
+              >
+                {micEnabled ? '🎤' : '🔇'}
+              </button>
+              <div class="avatardesk-modal__mic-level" aria-hidden="true">
+                <div
+                  class="avatardesk-modal__mic-level-fill"
+                  style={{ width: `${fillPct}%` }}
+                />
+              </div>
+              <span class="avatardesk-modal__agent-state">
+                {agentStateLabel ?? ''}
+              </span>
+            </div>
+          )}
+          {micError && <div class="avatardesk-modal__mic-error">{micError}</div>}
           <div class="avatardesk-modal__footer">{t('footer.poweredBy')}</div>
         </div>
       )}

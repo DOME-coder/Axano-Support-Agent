@@ -80,6 +80,62 @@ export const WIDGET_STYLES = `
   font-size: 14px;
 }
 
+.avatardesk-modal__controls {
+  padding: 10px 16px;
+  border-top: 1px solid #e8e8ee;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.avatardesk-modal__mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #d8d8de;
+  background: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.avatardesk-modal__mic-btn[aria-pressed="true"] {
+  background: #1b1b1f;
+  color: #fff;
+  border-color: #1b1b1f;
+}
+.avatardesk-modal__mic-btn:focus-visible {
+  outline: 2px solid #4f8cff;
+  outline-offset: 2px;
+}
+.avatardesk-modal__mic-level {
+  flex: 1;
+  height: 6px;
+  background: #ececf0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.avatardesk-modal__mic-level-fill {
+  height: 100%;
+  background: #4f8cff;
+  width: 0%;
+  transition: width 80ms linear;
+}
+.avatardesk-modal__agent-state {
+  font-size: 12px;
+  color: #666;
+  min-width: 90px;
+  text-align: right;
+}
+.avatardesk-modal__mic-error {
+  padding: 8px 16px;
+  background: #fff5f5;
+  border-top: 1px solid #fad7d7;
+  color: #9c2b2b;
+  font-size: 12px;
+}
+
 .avatardesk-modal__footer {
   padding: 12px 16px;
   border-top: 1px solid #e8e8ee;

@@ -5,23 +5,41 @@ import {
   RemoteTrackPublication,
   RemoteParticipant,
   Track,
+  type Participant,
 } from 'livekit-client';
 
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error';
+export type ConnectionState =
+  | 'idle'
+  | 'connecting'
+  | 'requesting-permission'
+  | 'connected'
+  | 'error';
+
+// Once we are connected, the agent state cycles. This is derived
+// purely from who has audio activity in the room, which keeps the
+// state machine simple and reliable without depending on LiveKit
+// data-channel messages that the agent may or may not emit.
+export type AgentState = 'idle' | 'listening' | 'speaking';
 
 export interface ConnectOptions {
   url: string;
   token: string;
   videoElement: HTMLVideoElement;
   onState: (state: ConnectionState) => void;
+  onAgentState?: (state: AgentState) => void;
+  onMicLevel?: (level: number) => void;
 }
 
 export interface RoomHandle {
   disconnect: () => Promise<void>;
+  setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
+  isMicrophoneEnabled: () => boolean;
 }
 
+const MIC_LEVEL_INTERVAL_MS = 100;
+
 export async function connect(options: ConnectOptions): Promise<RoomHandle> {
-  const { url, token, videoElement, onState } = options;
+  const { url, token, videoElement, onState, onAgentState, onMicLevel } = options;
   const room = new Room({ adaptiveStream: true, dynacast: true });
 
   onState('connecting');
@@ -29,12 +47,10 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
   room.on(
     RoomEvent.TrackSubscribed,
     (track: RemoteTrack, _pub: RemoteTrackPublication, _p: RemoteParticipant) => {
-      if (track.kind === Track.Kind.Video) {
-        track.attach(videoElement);
-      }
-      if (track.kind === Track.Kind.Audio) {
-        // Audio tracks need an attach target so the browser actually plays them.
-        // Avatar audio comes through the same participant as video.
+      if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
+        // The avatar publishes both video and audio on the same
+        // participant. Attaching audio to a <video> element makes the
+        // browser play it without an autoplay click.
         track.attach(videoElement);
       }
     },
@@ -44,6 +60,26 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
   room.on(RoomEvent.Reconnecting, () => onState('connecting'));
   room.on(RoomEvent.Reconnected, () => onState('connected'));
 
+  // ActiveSpeakersChanged fires whenever the set of speakers in the
+  // room changes. We derive the agent state from it: if the local
+  // participant is active -> listening, if a remote is active ->
+  // speaking, else idle.
+  room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+    if (!onAgentState) {
+      return;
+    }
+    const localSid = room.localParticipant.sid;
+    const localActive = speakers.some((s) => s.sid === localSid);
+    const remoteActive = speakers.some((s) => s.sid !== localSid);
+    if (localActive) {
+      onAgentState('listening');
+    } else if (remoteActive) {
+      onAgentState('speaking');
+    } else {
+      onAgentState('idle');
+    }
+  });
+
   try {
     await room.connect(url, token);
     onState('connected');
@@ -52,9 +88,30 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
     throw err;
   }
 
+  // Microphone level polling — only when a callback is registered.
+  // We read audioLevel off the local participant; LiveKit updates it
+  // server-side based on the published track. This is cheaper than
+  // running our own AudioContext analyzer.
+  let levelTimer: ReturnType<typeof setInterval> | null = null;
+  if (onMicLevel) {
+    levelTimer = setInterval(() => {
+      const level = room.localParticipant.audioLevel ?? 0;
+      onMicLevel(level);
+    }, MIC_LEVEL_INTERVAL_MS);
+  }
+
   return {
     disconnect: async () => {
+      if (levelTimer) {
+        clearInterval(levelTimer);
+      }
       await room.disconnect();
     },
+    setMicrophoneEnabled: async (enabled: boolean) => {
+      // Throws if the user denies the getUserMedia permission prompt.
+      // Caller is responsible for mapping that to a UI hint.
+      await room.localParticipant.setMicrophoneEnabled(enabled);
+    },
+    isMicrophoneEnabled: () => room.localParticipant.isMicrophoneEnabled,
   };
 }
