@@ -15,6 +15,11 @@ secrets/
 .internal-service-token.local
 .internal-service-token-hash.local
 
+# ─── Local tenant uploads (storage driver=local) ─────────
+# Only the repo-root storage directory; source dirs called "storage"
+# (services/api/src/storage) are not affected.
+/storage/
+
 # ─── Node.js / pnpm / TypeScript ─────────────────────────
 node_modules/
 .pnpm-store/
