@@ -3,30 +3,25 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { avatarConfigPatchSchema, type AvatarConfigPatch } from '@avatardesk/shared';
-import { fetchMe, logout } from '@/lib/api';
 import {
   fetchAvatarConfig,
   fetchAvatarOptions,
   updateAvatarConfig,
 } from '@/lib/avatar-config-api';
-import { useRouter } from 'next/navigation';
+import { DashboardShell } from '@/components/dashboard-shell';
 
 type FieldErrors = Partial<Record<keyof AvatarConfigPatch, string>>;
 
 export default function AvatarPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
 
-  const meQuery = useQuery({ queryKey: ['me'], queryFn: fetchMe });
   const configQuery = useQuery({
     queryKey: ['avatar-config'],
     queryFn: fetchAvatarConfig,
-    enabled: meQuery.isSuccess,
   });
   const optionsQuery = useQuery({
     queryKey: ['avatar-options'],
     queryFn: fetchAvatarOptions,
-    enabled: meQuery.isSuccess,
   });
 
   const [form, setForm] = useState<AvatarConfigPatch | null>(null);
@@ -49,21 +44,6 @@ export default function AvatarPage() {
       setFieldErrors({});
     },
   });
-
-  if (meQuery.isLoading) {
-    return <main className="p-8 text-sm text-slate-500">Lädt…</main>;
-  }
-  if (meQuery.isError || !meQuery.data) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-    return null;
-  }
-
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
 
   function update<K extends keyof AvatarConfigPatch>(key: K, value: AvatarConfigPatch[K]) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -94,21 +74,7 @@ export default function AvatarPage() {
   const ready = !!form && optionsQuery.data;
 
   return (
-    <main className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">AvatarDesk · {meQuery.data.name}</h1>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="text-sm text-slate-500 hover:text-ink"
-          >
-            Abmelden
-          </button>
-        </div>
-      </header>
-
-      <section className="max-w-3xl mx-auto px-6 py-8">
+    <DashboardShell>
         <h2 className="text-xl font-semibold mb-2">Avatar-Konfiguration</h2>
         <p className="text-sm text-slate-500 mb-6">
           Änderungen greifen ab der nächsten Konversation — kein Neustart nötig.
@@ -208,8 +174,7 @@ export default function AvatarPage() {
             </div>
           </form>
         )}
-      </section>
-    </main>
+    </DashboardShell>
   );
 }
 

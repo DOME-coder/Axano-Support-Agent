@@ -18,3 +18,15 @@ export function hashApiKey(plaintext: string): string {
 export function looksLikeApiKey(value: string): boolean {
   return value.startsWith(API_KEY_PREFIX) && value.length > API_KEY_PREFIX.length;
 }
+
+/**
+ * Build a non-secret hint for a hashed key, derived from the hash
+ * itself: prefix + last 4 hex characters of the sha256. We can't
+ * reconstruct the plaintext tail (we never stored it), so the
+ * dashboard shows hash-tail as a "this is *some* key" indicator
+ * rather than the user-facing key suffix. Phase 2 may persist a
+ * short non-secret label (e.g. nickname) instead.
+ */
+export function hashTailHint(hash: string): string {
+  return hash.slice(-4);
+}

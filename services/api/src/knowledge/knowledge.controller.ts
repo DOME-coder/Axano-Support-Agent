@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   HttpException,
   HttpStatus,
   Inject,
@@ -10,9 +11,16 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type {
+  KnowledgeSourceListResponse,
+  KnowledgeSourceStatus,
+  KnowledgeSourceSummary,
+  KnowledgeUploadResponse,
+} from '@avatardesk/shared';
 import type { Queue } from 'bullmq';
+import { desc, eq } from 'drizzle-orm';
 import { CurrentTenant } from '../auth/current-tenant.decorator';
-import { TenantApiKeyGuard } from '../auth/tenant-api-key.guard';
+import { SessionOrApiKeyGuard } from '../auth/session-or-api-key.guard';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
 import { knowledgeSources, type Tenant } from '../db/schema';
 import { KNOWLEDGE_INDEXING_QUEUE } from '../queue/queue.module';
@@ -26,16 +34,11 @@ interface UploadedFileShape {
   buffer: Buffer;
 }
 
-interface UploadResponse {
-  sourceId: string;
-  status: string;
-}
-
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_MIME = new Set(['application/pdf']);
 
 @Controller('api/knowledge')
-@UseGuards(TenantApiKeyGuard)
+@UseGuards(SessionOrApiKeyGuard)
 export class KnowledgeController {
   private readonly logger = new Logger(KnowledgeController.name);
 
@@ -44,6 +47,27 @@ export class KnowledgeController {
     @Inject(KNOWLEDGE_INDEXING_QUEUE) private readonly queue: Queue<IndexingJobData>,
     private readonly storage: StorageService,
   ) {}
+
+  @Get('sources')
+  async listSources(@CurrentTenant() tenant: Tenant): Promise<KnowledgeSourceListResponse> {
+    const rows = await this.db
+      .select()
+      .from(knowledgeSources)
+      .where(eq(knowledgeSources.tenantId, tenant.id))
+      .orderBy(desc(knowledgeSources.createdAt));
+
+    const sources: KnowledgeSourceSummary[] = rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      displayName: r.displayName,
+      status: r.status as KnowledgeSourceStatus,
+      chunkCount: r.chunkCount,
+      error: r.error,
+      lastIndexedAt: r.lastIndexedAt ? r.lastIndexedAt.toISOString() : null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+    return { sources };
+  }
 
   @Post('upload')
   @UseInterceptors(
@@ -54,7 +78,7 @@ export class KnowledgeController {
   async upload(
     @CurrentTenant() tenant: Tenant,
     @UploadedFile() file: UploadedFileShape | undefined,
-  ): Promise<UploadResponse> {
+  ): Promise<KnowledgeUploadResponse> {
     if (!file) {
       throw new HttpException('file field is required (multipart)', HttpStatus.BAD_REQUEST);
     }
@@ -89,7 +113,7 @@ export class KnowledgeController {
     await this.db
       .update(knowledgeSources)
       .set({ sourceUri: fullPath })
-      .where(eqId(source.id));
+      .where(eq(knowledgeSources.id, source.id));
 
     await this.queue.add('index', {
       sourceId: source.id,
@@ -103,10 +127,4 @@ export class KnowledgeController {
 
     return { sourceId: source.id, status: 'pending' };
   }
-}
-
-// Tiny local alias to keep the controller body readable.
-import { eq } from 'drizzle-orm';
-function eqId(id: string) {
-  return eq(knowledgeSources.id, id);
 }
