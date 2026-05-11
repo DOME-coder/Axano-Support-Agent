@@ -17,6 +17,7 @@
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @avatardesk/api db:generate",
     "db:migrate": "pnpm --filter @avatardesk/api db:migrate",
+    "db:seed": "pnpm --filter @avatardesk/api db:seed",
     "db:studio": "pnpm --filter @avatardesk/api db:studio"
   },
   "devDependencies": {

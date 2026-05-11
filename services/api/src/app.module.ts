@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from './auth/auth.module';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
+import { LivekitModule } from './livekit/livekit.module';
+import { WidgetSessionModule } from './widget-session/widget-session.module';
 
 @Module({
-  imports: [DbModule, HealthModule],
+  imports: [DbModule, AuthModule, LivekitModule, HealthModule, WidgetSessionModule],
 })
 export class AppModule {}
