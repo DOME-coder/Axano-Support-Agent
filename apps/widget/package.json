@@ -12,6 +12,7 @@
     "lint": "echo 'lint not yet wired up for widget — phase 1'"
   },
   "dependencies": {
+    "@avatardesk/shared": "workspace:*",
     "livekit-client": "^2.7.5",
     "preact": "^10.24.3"
   },

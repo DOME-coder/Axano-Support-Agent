@@ -63,6 +63,9 @@ importers:
 
   apps/widget:
     dependencies:
+      '@avatardesk/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       livekit-client:
         specifier: ^2.7.5
         version: 2.18.9(@types/dom-mediacapture-record@1.0.22)

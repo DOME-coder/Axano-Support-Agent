@@ -5,6 +5,10 @@ import {
   type ConnectionState,
   type RoomHandle,
 } from './livekit-client';
+import {
+  readActiveConversationId,
+  writeActiveConversationId,
+} from './conversation-storage';
 import { fetchWidgetSession } from './session';
 import { t, type StringKey } from './strings';
 
@@ -52,10 +56,16 @@ export function Widget(props: WidgetProps) {
         const session = await fetchWidgetSession({
           apiUrl: props.apiUrl,
           tenantApiKey: props.tenantApiKey,
+          resumeConversationId: readActiveConversationId(),
         });
         if (cancelled) {
           return;
         }
+        // Persist (or refresh) the conversationId so the next modal
+        // open within the resume window continues this row instead
+        // of starting fresh. Server-side validation guarantees this
+        // can't bind to another tenant's conversation.
+        writeActiveConversationId(session.conversationId);
         const handle = await connect({
           url: session.url,
           token: session.token,
