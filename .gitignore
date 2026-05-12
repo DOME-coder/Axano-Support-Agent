@@ -17,9 +17,12 @@ secrets/
 .last-magic-link.local
 
 # ─── Local tenant uploads (storage driver=local) ─────────
-# Only the repo-root storage directory; source dirs called "storage"
-# (services/api/src/storage) are not affected.
+# Repo-root upload dir when the api runs from the workspace root.
+# services/api/storage/ is the same data when nest start --watch
+# uses services/api/ as cwd. Both anchored so the source dir
+# services/api/src/storage stays tracked.
 /storage/
+/services/api/storage/
 
 # ─── Node.js / pnpm / TypeScript ─────────────────────────
 node_modules/

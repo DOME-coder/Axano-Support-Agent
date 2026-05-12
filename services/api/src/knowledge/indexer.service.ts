@@ -41,9 +41,8 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
-function toHalfvecLiteral(values: number[]): string {
-  return `[${values.join(',')}]`;
-}
+// drizzle's customType.toDriver() handles the halfvec literal
+// formatting; we just hand the raw embedding array straight to it.
 
 @Injectable()
 export class KnowledgeIndexerService implements OnModuleInit, OnApplicationShutdown {
@@ -127,7 +126,7 @@ export class KnowledgeIndexerService implements OnModuleInit, OnApplicationShutd
           tenantId,
           chunkIndex: i + idx,
           content: batch[idx]!,
-          embedding: toHalfvecLiteral(entry.embedding) as unknown as number[],
+          embedding: entry.embedding,
           metadata: null,
         }));
         await this.db.insert(knowledgeChunks).values(rows);
