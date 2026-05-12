@@ -26,7 +26,10 @@ import structlog
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.agents.llm import function_tool
-from livekit.agents.voice.events import ConversationItemAddedEvent
+from livekit.agents.voice.events import (
+    AgentFalseInterruptionEvent,
+    ConversationItemAddedEvent,
+)
 from livekit.plugins import anthropic, bey, deepgram, elevenlabs, silero
 
 from api_client import AgentConfig, ApiClient
@@ -221,6 +224,18 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     language = cfg.language if cfg else "de"
 
+    # VAD tuning for German barge-in (sprint-2.0 task 2.0.2):
+    # - min_silence_duration up from 0.55s to 0.8s: german has more
+    #   word-internal pauses than english, the default produces too
+    #   many false interruptions.
+    # - activation_threshold up from 0.5 to 0.6: cuts background noise
+    #   (typing, breathing) from triggering an interruption.
+    # These are kinder defaults; the underlying livekit-agents
+    # scheduling-paused issue after a real interruption still exists
+    # (private state, no public reset hook in 1.5.8), but it's
+    # triggered much less often this way. AgentFalseInterruptionEvent
+    # below logs when the lib's auto-resume path fires, so we have
+    # observability if the bug returns.
     session = AgentSession(
         stt=deepgram.STT(model=os.getenv("DEEPGRAM_MODEL", "nova-2"), language=language),
         llm=anthropic.LLM(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")),
@@ -228,8 +243,19 @@ async def entrypoint(ctx: JobContext) -> None:
             voice_id=voice_id,
             api_key=os.environ["ELEVENLABS_API_KEY"],
         ),
-        vad=silero.VAD.load(),
+        vad=silero.VAD.load(
+            min_silence_duration=0.8,
+            activation_threshold=0.6,
+        ),
     )
+
+    def _on_false_interruption(event: AgentFalseInterruptionEvent) -> None:
+        log.info(
+            "agent false interruption",
+            resumed=event.resumed,
+        )
+
+    session.on("agent_false_interruption", _on_false_interruption)
 
     # Persist every user/assistant turn. The event fires once per
     # committed conversation item; tool calls are excluded here (we
