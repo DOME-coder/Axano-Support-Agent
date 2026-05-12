@@ -10,31 +10,8 @@ import { eq } from 'drizzle-orm';
 import { jwtVerify } from 'jose';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
 import { tenants } from '../db/schema';
+import { SESSION_COOKIE, getJwtSecretKey } from './jwt-secret';
 import type { RequestWithTenant } from './tenant-api-key.guard';
-
-const SESSION_COOKIE = 'avatardesk_session';
-
-let cachedSecretKey: Uint8Array | null = null;
-
-function buildSecretKey(): Uint8Array {
-  if (cachedSecretKey) {
-    return cachedSecretKey;
-  }
-  const secret = process.env.APP_SECRET;
-  if (secret) {
-    cachedSecretKey = new TextEncoder().encode(secret);
-    return cachedSecretKey;
-  }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('APP_SECRET is required in production');
-  }
-  // Dev fallback — same per-process key the magic-link controller
-  // uses. Each api restart rotates the key and invalidates all
-  // outstanding sessions.
-  const devSecret = `dev-fallback-${process.pid}-${Date.now()}`;
-  cachedSecretKey = new TextEncoder().encode(devSecret);
-  return cachedSecretKey;
-}
 
 interface SessionRequest extends RequestWithTenant {
   cookies?: Record<string, string>;
@@ -61,7 +38,7 @@ export class SessionGuard implements CanActivate {
 
     let tenantId: string;
     try {
-      const { payload } = await jwtVerify(sessionToken, buildSecretKey());
+      const { payload } = await jwtVerify(sessionToken, getJwtSecretKey());
       if (payload.purpose !== 'session' || typeof payload.tenantId !== 'string') {
         throw new Error('invalid claims');
       }

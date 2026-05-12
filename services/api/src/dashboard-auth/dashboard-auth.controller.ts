@@ -15,6 +15,7 @@ import type { Request, Response } from 'express';
 import { SignJWT, jwtVerify } from 'jose';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { SESSION_COOKIE, getJwtSecretKey } from '../auth/jwt-secret';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
 import { tenants } from '../db/schema';
 
@@ -40,33 +41,9 @@ interface RequestMagicLinkResponse {
 
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
-const SESSION_COOKIE = 'avatardesk_session';
-
-let cachedSecretKey: Uint8Array | null = null;
-
-function buildSecretKey(): Uint8Array {
-  if (cachedSecretKey) {
-    return cachedSecretKey;
-  }
-  const secret = process.env.APP_SECRET;
-  if (secret) {
-    cachedSecretKey = new TextEncoder().encode(secret);
-    return cachedSecretKey;
-  }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('APP_SECRET is required in production');
-  }
-  // Phase-1 dev convenience: a stable per-process secret so login
-  // sessions survive page reloads without forcing the user to fill
-  // .env on first run. Production must set APP_SECRET via .env.
-  // eslint-disable-next-line no-console
-  console.warn(
-    '[DashboardAuth] APP_SECRET not set; using a per-process dev fallback. Set APP_SECRET in .env for stable sessions across restarts.',
-  );
-  const devSecret = `dev-fallback-${process.pid}-${Date.now()}`;
-  cachedSecretKey = new TextEncoder().encode(devSecret);
-  return cachedSecretKey;
-}
+// SESSION_COOKIE name + secret key live in ../auth/jwt-secret so the
+// session guard reads the same values. The previous local copies
+// drifted apart on every cold start.
 
 @Controller('api/dashboard-auth')
 export class DashboardAuthController {
@@ -100,7 +77,7 @@ export class DashboardAuthController {
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime(`${MAGIC_LINK_TTL_SECONDS}s`)
-      .sign(buildSecretKey());
+      .sign(getJwtSecretKey());
 
     const dashboardUrl = process.env.DASHBOARD_URL ?? 'http://localhost:3001';
     const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:3000';
@@ -142,7 +119,7 @@ export class DashboardAuthController {
 
     let tenantId: string;
     try {
-      const { payload } = await jwtVerify(token, buildSecretKey());
+      const { payload } = await jwtVerify(token, getJwtSecretKey());
       if (payload.purpose !== 'magic-link' || typeof payload.tenantId !== 'string') {
         throw new Error('invalid token claims');
       }
@@ -157,7 +134,7 @@ export class DashboardAuthController {
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-      .sign(buildSecretKey());
+      .sign(getJwtSecretKey());
 
     res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
@@ -184,7 +161,7 @@ export class DashboardAuthController {
       throw new HttpException('no session', HttpStatus.UNAUTHORIZED);
     }
     try {
-      const { payload } = await jwtVerify(sessionToken, buildSecretKey());
+      const { payload } = await jwtVerify(sessionToken, getJwtSecretKey());
       if (payload.purpose !== 'session' || typeof payload.tenantId !== 'string') {
         throw new Error('invalid claims');
       }
