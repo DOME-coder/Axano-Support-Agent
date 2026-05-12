@@ -40,6 +40,17 @@ export default function AvatarPage() {
     mutationFn: updateAvatarConfig,
     onSuccess: (data) => {
       queryClient.setQueryData(['avatar-config'], data);
+      // Re-sync the local form from the authoritative server response
+      // so any server-side normalization (trim, voice-id remap, ...)
+      // is visible to the user. The initial-fill useEffect above is
+      // guarded by `!form` and won't run again on its own.
+      setForm({
+        beyAvatarId: data.beyAvatarId,
+        elevenlabsVoiceId: data.elevenlabsVoiceId,
+        language: data.language,
+        personaPrompt: data.personaPrompt,
+        greeting: data.greeting,
+      });
       setSavedAt(Date.now());
       setFieldErrors({});
     },
