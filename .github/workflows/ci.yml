@@ -45,7 +45,7 @@ jobs:
         run: pnpm --filter @avatardesk/widget build
 
   agent:
-    name: Agent (lint + syntax)
+    name: Agent + vision-worker (lint + syntax)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,3 +68,12 @@ jobs:
 
       - name: Syntax check
         run: python -m py_compile services/agent/main.py
+
+      # Vision-worker is a second python service; same shallow CI
+      # pattern as the conversational agent — lint + import-syntax
+      # only, no live livekit/anthropic round trip.
+      - name: Lint vision-worker
+        run: ruff check services/vision-worker
+
+      - name: Syntax check vision-worker
+        run: python -m py_compile services/vision-worker/main.py

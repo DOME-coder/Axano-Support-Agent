@@ -1,0 +1,33 @@
+[project]
+name = "avatardesk-vision-worker"
+version = "0.0.0"
+description = "AvatarDesk vision worker — samples shared-screen frames from livekit and writes textual scene descriptions to redis for the conversational agent to read via the analyze_screen tool."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # We do not need the conversational provider extras (anthropic
+    # via livekit-plugins, deepgram, elevenlabs, bey, silero) here —
+    # vision-worker only consumes video tracks and calls anthropic
+    # directly for a single-shot image-to-text request.
+    "livekit-agents~=1.2",
+    "anthropic~=0.39",
+    "pillow~=11.0",
+    "redis~=5.0",
+    "structlog~=24.4",
+    "python-dotenv~=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff~=0.7",
+    "black~=24.10",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
