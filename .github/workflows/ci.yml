@@ -30,6 +30,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # @avatardesk/shared resolves through "main" / "types" pointing
+      # at ./dist, which is gitignored. The widget typecheck and build
+      # both need those compiled .d.ts and .js files to see the latest
+      # shared types — without this step, CI happily reads stale or
+      # missing artifacts and fails with phantom type errors.
+      - name: Build shared package
+        run: pnpm --filter @avatardesk/shared build
+
       - name: Typecheck widget
         run: pnpm --filter @avatardesk/widget typecheck
 
