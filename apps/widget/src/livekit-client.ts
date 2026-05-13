@@ -28,18 +28,34 @@ export interface ConnectOptions {
   onState: (state: ConnectionState) => void;
   onAgentState?: (state: AgentState) => void;
   onMicLevel?: (level: number) => void;
+  // Fires when the local screen-share state changes — either because
+  // the widget toggled it or because the user clicked the browser's
+  // native "Stop sharing" indicator (which we listen for via the
+  // track's ended event below). UI uses this to keep the share button
+  // and the live indicator in sync.
+  onScreenShareState?: (enabled: boolean) => void;
 }
 
 export interface RoomHandle {
   disconnect: () => Promise<void>;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
   isMicrophoneEnabled: () => boolean;
+  setScreenShareEnabled: (enabled: boolean) => Promise<void>;
+  isScreenShareEnabled: () => boolean;
 }
 
 const MIC_LEVEL_INTERVAL_MS = 100;
 
 export async function connect(options: ConnectOptions): Promise<RoomHandle> {
-  const { url, token, videoElement, onState, onAgentState, onMicLevel } = options;
+  const {
+    url,
+    token,
+    videoElement,
+    onState,
+    onAgentState,
+    onMicLevel,
+    onScreenShareState,
+  } = options;
   const room = new Room({ adaptiveStream: true, dynacast: true });
 
   onState('connecting');
@@ -100,6 +116,16 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
     }, MIC_LEVEL_INTERVAL_MS);
   }
 
+  // Sync the screen-share state callback when the user stops sharing
+  // via the browser's native "Stop sharing" banner — LiveKit fires
+  // LocalTrackUnpublished for the screen track in that case, and we
+  // need the widget UI to follow along.
+  room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+    if (publication.source === Track.Source.ScreenShare && onScreenShareState) {
+      onScreenShareState(false);
+    }
+  });
+
   return {
     disconnect: async () => {
       if (levelTimer) {
@@ -113,5 +139,17 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
       await room.localParticipant.setMicrophoneEnabled(enabled);
     },
     isMicrophoneEnabled: () => room.localParticipant.isMicrophoneEnabled,
+    setScreenShareEnabled: async (enabled: boolean) => {
+      // getDisplayMedia() throws a DOMException with name "NotAllowedError"
+      // when the user cancels the browser picker. That's a user-driven
+      // outcome, not a real error — but LiveKit re-throws it as-is, so
+      // the caller still needs to handle both that and other failures
+      // (no devices, OS-level screen-record permission off on macOS).
+      await room.localParticipant.setScreenShareEnabled(enabled);
+      if (onScreenShareState) {
+        onScreenShareState(enabled);
+      }
+    },
+    isScreenShareEnabled: () => room.localParticipant.isScreenShareEnabled,
   };
 }

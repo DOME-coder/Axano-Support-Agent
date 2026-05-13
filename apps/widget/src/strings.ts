@@ -21,6 +21,14 @@ export type StringKey =
   | 'mic.enable'
   | 'mic.disable'
   | 'mic.permissionDenied'
+  | 'screen.start'
+  | 'screen.stop'
+  | 'screen.active'
+  | 'screen.errorDenied'
+  | 'screen.consent.title'
+  | 'screen.consent.body'
+  | 'screen.consent.accept'
+  | 'screen.consent.cancel'
   | 'placeholder.waitingForAvatar'
   | 'footer.poweredBy';
 
@@ -41,6 +49,20 @@ const TABLE: Record<Locale, Record<StringKey, string>> = {
     'mic.disable': 'Mikrofon stummschalten',
     'mic.permissionDenied':
       'Mikrofon-Zugriff abgelehnt. Bitte in den Browser-Einstellungen freigeben und Modal neu öffnen.',
+    'screen.start': 'Bildschirm teilen',
+    'screen.stop': 'Teilen beenden',
+    'screen.active': 'Du teilst gerade deinen Bildschirm',
+    'screen.errorDenied':
+      'Bildschirmfreigabe abgelehnt oder abgebrochen. Du kannst es jederzeit erneut versuchen.',
+    'screen.consent.title': 'Bildschirm teilen',
+    'screen.consent.body':
+      'Sofia kann sehen, was du teilst, und dir konkrete Klick-für-Klick-Hilfe geben. ' +
+      'Standbilder werden an einen LLM-Anbieter (Anthropic) gesendet und nicht ' +
+      'gespeichert. Bitte teile nur das einzelne Fenster, das du brauchst — nicht ' +
+      'den ganzen Bildschirm — und schließe vorher Tabs mit sensiblen Inhalten ' +
+      '(Online-Banking, E-Mail, Behörden).',
+    'screen.consent.accept': 'Verstanden, teilen',
+    'screen.consent.cancel': 'Abbrechen',
     'placeholder.waitingForAvatar': 'Avatar lädt…',
     'footer.poweredBy': 'powered by AvatarDesk',
   },
@@ -60,6 +82,20 @@ const TABLE: Record<Locale, Record<StringKey, string>> = {
     'mic.disable': 'Mute microphone',
     'mic.permissionDenied':
       'Microphone access denied. Enable it in your browser settings and re-open the modal.',
+    'screen.start': 'Share screen',
+    'screen.stop': 'Stop sharing',
+    'screen.active': 'You are sharing your screen',
+    'screen.errorDenied':
+      'Screen share was denied or cancelled. You can try again at any time.',
+    'screen.consent.title': 'Share your screen',
+    'screen.consent.body':
+      'Sofia can see what you share and give you precise click-by-click help. ' +
+      'Still frames are sent to an LLM provider (Anthropic) and are not stored. ' +
+      'Please share only the single window you need — not your whole screen — ' +
+      'and close tabs with sensitive content (online banking, email, government ' +
+      'forms) before you start.',
+    'screen.consent.accept': 'Got it, share',
+    'screen.consent.cancel': 'Cancel',
     'placeholder.waitingForAvatar': 'Loading avatar…',
     'footer.poweredBy': 'powered by AvatarDesk',
   },

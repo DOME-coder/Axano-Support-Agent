@@ -37,6 +37,13 @@ export function Widget(props: WidgetProps) {
   const [micEnabled, setMicEnabled] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  // Tenant-level gate from the session response. The share UI is
+  // hidden entirely when this is false — opt-in lives in the
+  // dashboard avatar-config form (ADR 007 §A).
+  const [allowScreenShare, setAllowScreenShare] = useState(false);
+  const [screenShareEnabled, setScreenShareEnabled] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const handleRef = useRef<RoomHandle | null>(null);
@@ -66,6 +73,9 @@ export function Widget(props: WidgetProps) {
         // of starting fresh. Server-side validation guarantees this
         // can't bind to another tenant's conversation.
         writeActiveConversationId(session.conversationId);
+        if (!cancelled) {
+          setAllowScreenShare(session.avatar.allowScreenShare);
+        }
         const handle = await connect({
           url: session.url,
           token: session.token,
@@ -83,6 +93,14 @@ export function Widget(props: WidgetProps) {
           onMicLevel: (level) => {
             if (!cancelled) {
               setMicLevel(level);
+            }
+          },
+          onScreenShareState: (enabled) => {
+            if (!cancelled) {
+              setScreenShareEnabled(enabled);
+              if (!enabled) {
+                setScreenShareError(null);
+              }
             }
           },
         });
@@ -130,6 +148,10 @@ export function Widget(props: WidgetProps) {
       setMicEnabled(false);
       setMicLevel(0);
       setMicError(null);
+      setAllowScreenShare(false);
+      setScreenShareEnabled(false);
+      setShowConsent(false);
+      setScreenShareError(null);
     };
   }, [open, props.apiUrl, props.tenantApiKey]);
 
@@ -145,6 +167,57 @@ export function Widget(props: WidgetProps) {
     } catch (err) {
       console.error('AvatarDesk: microphone toggle failed', err);
       setMicError(t('mic.permissionDenied'));
+    }
+  };
+
+  const onShareClick = () => {
+    if (!handleRef.current) {
+      return;
+    }
+    if (screenShareEnabled) {
+      // No second consent on stop.
+      void stopShare();
+      return;
+    }
+    setScreenShareError(null);
+    setShowConsent(true);
+  };
+
+  const acceptConsent = async () => {
+    setShowConsent(false);
+    if (!handleRef.current) {
+      return;
+    }
+    try {
+      await handleRef.current.setScreenShareEnabled(true);
+      // The connect-time onScreenShareState callback also fires and
+      // sets the same state; setting it here as well keeps the UI
+      // responsive even if the LiveKit event arrives a tick later.
+      setScreenShareEnabled(true);
+      setScreenShareError(null);
+    } catch (err) {
+      // Browser picker cancel = DOMException NotAllowedError. Treat
+      // all errors as a soft denial — re-tryable, no scary message.
+      console.error('AvatarDesk: screen-share failed', err);
+      setScreenShareEnabled(false);
+      setScreenShareError(t('screen.errorDenied'));
+    }
+  };
+
+  const cancelConsent = () => {
+    setShowConsent(false);
+  };
+
+  const stopShare = async () => {
+    if (!handleRef.current) {
+      return;
+    }
+    try {
+      await handleRef.current.setScreenShareEnabled(false);
+      setScreenShareEnabled(false);
+      setScreenShareError(null);
+    } catch (err) {
+      console.error('AvatarDesk: stop screen-share failed', err);
     }
   };
 
@@ -166,7 +239,14 @@ export function Widget(props: WidgetProps) {
       {open && (
         <div class="avatardesk-modal" role="dialog" aria-label={t('modal.aria')}>
           <div class="avatardesk-modal__header">
-            <span class="avatardesk-modal__status">{t(STATUS_LABEL[state])}</span>
+            <div>
+              <span class="avatardesk-modal__status">{t(STATUS_LABEL[state])}</span>
+              {screenShareEnabled && (
+                <span class="avatardesk-modal__share-indicator" role="status">
+                  {t('screen.active')}
+                </span>
+              )}
+            </div>
             <button
               class="avatardesk-modal__close"
               aria-label={t('modal.close')}
@@ -181,6 +261,30 @@ export function Widget(props: WidgetProps) {
               <span class="avatardesk-modal__placeholder">
                 {t('placeholder.waitingForAvatar')}
               </span>
+            )}
+            {showConsent && (
+              <div class="avatardesk-consent" role="dialog" aria-modal="true">
+                <div class="avatardesk-consent__card">
+                  <h3 class="avatardesk-consent__title">{t('screen.consent.title')}</h3>
+                  <p class="avatardesk-consent__body">{t('screen.consent.body')}</p>
+                  <div class="avatardesk-consent__actions">
+                    <button
+                      type="button"
+                      class="avatardesk-consent__btn"
+                      onClick={cancelConsent}
+                    >
+                      {t('screen.consent.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      class="avatardesk-consent__btn avatardesk-consent__btn--primary"
+                      onClick={acceptConsent}
+                    >
+                      {t('screen.consent.accept')}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
           {state === 'connected' && (
@@ -202,9 +306,22 @@ export function Widget(props: WidgetProps) {
               <span class="avatardesk-modal__agent-state">
                 {agentStateLabel ?? ''}
               </span>
+              {allowScreenShare && (
+                <button
+                  type="button"
+                  class="avatardesk-modal__share-btn"
+                  aria-pressed={screenShareEnabled}
+                  onClick={onShareClick}
+                >
+                  {screenShareEnabled ? t('screen.stop') : t('screen.start')}
+                </button>
+              )}
             </div>
           )}
           {micError && <div class="avatardesk-modal__mic-error">{micError}</div>}
+          {screenShareError && (
+            <div class="avatardesk-modal__share-error">{screenShareError}</div>
+          )}
           <div class="avatardesk-modal__footer">{t('footer.poweredBy')}</div>
         </div>
       )}
