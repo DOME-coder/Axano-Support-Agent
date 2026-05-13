@@ -308,4 +308,11 @@ async def entrypoint(ctx: JobContext) -> None:
 if __name__ == "__main__":
     _configure_logging()
     _validate_env()
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    # Explicit dispatch mode: the api embeds this agent_name in the
+    # widget token's roomConfig so livekit wakes this worker AND the
+    # conversational agent for the same room in parallel. Without
+    # the name, both workers register with agent_name="" and race for
+    # each job — the conversational agent always wins the race because
+    # it has cheaper startup, so the vision worker would never see a
+    # dispatch. See plan section "Sprint 2.1.5".
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="vision-worker"))

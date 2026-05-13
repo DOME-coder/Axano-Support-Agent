@@ -1,5 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, RoomAgentDispatch, RoomConfiguration } from 'livekit-server-sdk';
+
+// Two workers run in parallel per room (see plan "Sprint 2.1.5"):
+// the conversational agent drives stt+llm+tts+bey, the vision worker
+// samples shared-screen frames and writes redis snapshots for the
+// analyze_screen tool. Both register with these exact agent_name
+// strings in their WorkerOptions, so livekit dispatches both when
+// the token's roomConfig lists them here.
+const ROOM_AGENTS = ['conversational-agent', 'vision-worker'] as const;
 
 export interface WidgetTokenInput {
   room: string;
@@ -42,10 +50,16 @@ export class TokenIssuerService {
       canSubscribe: true,
     });
 
+    accessToken.roomConfig = new RoomConfiguration({
+      agents: ROOM_AGENTS.map((agentName) => new RoomAgentDispatch({ agentName })),
+    });
+
     const token = await accessToken.toJwt();
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-    this.logger.log(`issued widget token: room=${input.room} ttl=${ttlSeconds}s`);
+    this.logger.log(
+      `issued widget token: room=${input.room} ttl=${ttlSeconds}s agents=[${ROOM_AGENTS.join(',')}]`,
+    );
 
     return { url, token, expiresAt };
   }

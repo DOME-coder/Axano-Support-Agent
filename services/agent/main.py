@@ -418,4 +418,9 @@ async def entrypoint(ctx: JobContext) -> None:
 if __name__ == "__main__":
     _configure_logging()
     _validate_env()
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    # Explicit dispatch mode: the api embeds this agent_name in the
+    # widget token's roomConfig alongside "vision-worker". Without
+    # the explicit name both workers register with agent_name="" and
+    # race for each job, which deterministically locks the vision
+    # worker out of every dispatch. See plan section "Sprint 2.1.5".
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="conversational-agent"))
