@@ -11,6 +11,11 @@ dependencies = [
     "python-dotenv~=1.0",
     "structlog~=24.4",
     "httpx~=0.28",
+    # analyze_screen tool reads the latest scene description that the
+    # vision-worker writes to `vision:latest:<conversation_id>` with a
+    # 60-second TTL. Sticking to the same major as the worker keeps
+    # client behavior consistent across the two services.
+    "redis~=5.0",
 ]
 
 [project.optional-dependencies]

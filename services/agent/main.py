@@ -22,6 +22,7 @@ import sys
 import time
 from pathlib import Path
 
+import redis.asyncio as redis_async
 import structlog
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
@@ -85,6 +86,21 @@ RAG_GROUNDING_HINT = (
     "weißt — niemals erfinden."
 )
 
+# Triggers the vision tool. Kept short and concrete so the LLM can
+# match user phrasing without us having to enumerate every variation.
+# The tool itself returns an honest "no share" message when redis is
+# empty, so the LLM is allowed to call it even on ambiguous prompts.
+SCREEN_VISION_HINT = (
+    "\n\nWICHTIG: Wenn der Endkunde nach etwas Visuellem auf seinem "
+    "Bildschirm fragt — z. B. 'wo finde ich…', 'wie klicke ich…', 'was "
+    "siehst du auf meinem Bildschirm', 'welcher Button…', 'was steht "
+    "da…' — rufst du IMMER zuerst das Tool `analyze_screen` auf, bevor "
+    "du antwortest. Beziehe dich in der Antwort konkret auf die "
+    "beschriebenen UI-Elemente und ihre Position. Wenn das Tool sagt, "
+    "dass kein Bildschirm geteilt wird, bitte den Endkunden, den "
+    "Bildschirm-Button im Modal zu drücken."
+)
+
 
 class ConversationalAgent(Agent):
     """Phase-1 conversational agent with RAG tool.
@@ -102,18 +118,26 @@ class ConversationalAgent(Agent):
         *,
         tenant_id: str | None,
         api_client: ApiClient | None,
+        conversation_id: str | None = None,
+        redis_client: redis_async.Redis | None = None,
     ) -> None:
         self._tenant_id = tenant_id
         self._api_client = api_client
-        # Only attach the rag tool when both pieces are present; in
-        # fallback mode (no metadata, no api) we keep the agent
-        # purely chatty and tell the llm explicitly that there's no
-        # knowledge base available.
+        self._conversation_id = conversation_id
+        self._redis_client = redis_client
+        # Each tool attaches only when its prerequisites are present.
+        # RAG needs the tenant id + api client; analyze_screen needs
+        # the conversation id + a redis connection that can read the
+        # vision-worker's snapshot. In fallback mode (e.g. dev run
+        # without metadata) we run as a plain chatty agent.
         tools = []
         full_instructions = instructions
         if tenant_id and api_client:
             tools.append(self._build_search_tool(tenant_id, api_client))
-            full_instructions = instructions + RAG_GROUNDING_HINT
+            full_instructions = full_instructions + RAG_GROUNDING_HINT
+        if conversation_id and redis_client is not None:
+            tools.append(self._build_analyze_screen_tool(conversation_id, redis_client))
+            full_instructions = full_instructions + SCREEN_VISION_HINT
         super().__init__(instructions=full_instructions, tools=tools)
 
     @staticmethod
@@ -142,6 +166,48 @@ class ConversationalAgent(Agent):
             return "\n\n".join(lines)
 
         return search_knowledge_base
+
+    @staticmethod
+    def _build_analyze_screen_tool(conversation_id: str, redis_client: redis_async.Redis):
+        log = structlog.get_logger(__name__)
+        redis_key = f"vision:latest:{conversation_id}"
+
+        @function_tool(
+            name="analyze_screen",
+            description=(
+                "Liefert eine kurze Beschreibung dessen, was der Endkunde "
+                "gerade auf seinem geteilten Bildschirm sieht — sichtbare "
+                "UI-Elemente, deren Position und Zustand. Rufe dieses Tool "
+                "auf, sobald der Endkunde nach etwas auf seinem Bildschirm "
+                "fragt oder Hilfe beim Klick-Pfad braucht. Wenn der "
+                "Endkunde aktuell nicht teilt, sagt das Tool das ehrlich — "
+                "dann bitte ihn, im Modal auf 'Bildschirm teilen' zu klicken."
+            ),
+        )
+        async def analyze_screen() -> str:
+            try:
+                snapshot = await redis_client.get(redis_key)
+            except Exception as exc:  # noqa: BLE001
+                # Redis hiccup should never silently drop the call — but it
+                # also should never crash the conversation. Tell the LLM
+                # the truth so it can apologize gracefully.
+                log.error("analyze_screen redis read failed", error=str(exc))
+                return (
+                    "Die Bildschirm-Analyse ist gerade nicht erreichbar. "
+                    "Bitte versuche es in wenigen Sekunden erneut."
+                )
+            if not snapshot:
+                log.info("analyze_screen called but no snapshot present")
+                return (
+                    "Der Endkunde teilt aktuell keinen Bildschirm, oder die "
+                    "Analyse ist noch nicht verfügbar. Bitte ihn, im Modal "
+                    "auf den Bildschirm-Teilen-Button zu klicken und ein "
+                    "paar Sekunden zu warten."
+                )
+            log.info("analyze_screen returned snapshot", chars=len(snapshot))
+            return snapshot
+
+        return analyze_screen
 
 
 def _extract_conversation_id(room_metadata: str | None) -> str | None:
@@ -202,6 +268,25 @@ async def entrypoint(ctx: JobContext) -> None:
             if api_client:
                 await api_client.close()
                 api_client = None
+
+    # Redis is only used to read vision-worker snapshots through the
+    # analyze_screen tool. We connect lazily so a missing REDIS_URL
+    # (dev runs, self-tests) does not bring down the conversation —
+    # the agent just runs without the screen-vision tool.
+    redis_client: redis_async.Redis | None = None
+    redis_url = os.getenv("REDIS_URL")
+    if conversation_id and redis_url:
+        try:
+            redis_client = redis_async.from_url(redis_url, decode_responses=True)
+            # ping eagerly so a misconfigured url fails here, not on
+            # the first tool call mid-conversation.
+            await redis_client.ping()
+            log.info("redis connected for analyze_screen tool")
+        except Exception as exc:  # noqa: BLE001
+            log.error("redis connect failed; analyze_screen tool disabled", error=str(exc))
+            if redis_client is not None:
+                await redis_client.aclose()
+            redis_client = None
 
     bey_avatar_id = cfg.bey_avatar_id if cfg else os.environ["BEY_DEFAULT_AVATAR_ID"]
     voice_id = cfg.elevenlabs_voice_id if cfg else os.environ["ELEVENLABS_DEFAULT_VOICE_ID"]
@@ -289,6 +374,8 @@ async def entrypoint(ctx: JobContext) -> None:
             instructions=persona_prompt,
             tenant_id=cfg.tenant_id if cfg else None,
             api_client=api_client,
+            conversation_id=conversation_id,
+            redis_client=redis_client,
         ),
         room=ctx.room,
     )
@@ -319,6 +406,13 @@ async def entrypoint(ctx: JobContext) -> None:
                 await api_client.close()  # type: ignore[union-attr]
 
         ctx.add_shutdown_callback(_on_shutdown)
+
+    if redis_client is not None:
+
+        async def _on_redis_shutdown() -> None:
+            await redis_client.aclose()  # type: ignore[union-attr]
+
+        ctx.add_shutdown_callback(_on_redis_shutdown)
 
 
 if __name__ == "__main__":
