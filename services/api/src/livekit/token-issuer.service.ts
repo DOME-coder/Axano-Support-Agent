@@ -50,7 +50,13 @@ export class TokenIssuerService {
       canSubscribe: true,
     });
 
+    // Name must match the VideoGrant's room above. livekit cloud
+    // rejects the token (websocket fails to open) when roomConfig is
+    // present without a name — protobuf-es serializes the missing
+    // field as `name: ""` which the server treats as a malformed
+    // auto-create request.
     accessToken.roomConfig = new RoomConfiguration({
+      name: input.room,
       agents: ROOM_AGENTS.map((agentName) => new RoomAgentDispatch({ agentName })),
     });
 
