@@ -16,6 +16,7 @@ export const avatarConfigs = pgTable('avatar_configs', {
   personaPrompt: text('persona_prompt').notNull(),
   greeting: text('greeting').notNull(),
   isCustomAvatar: boolean('is_custom_avatar').notNull().default(false),
+  allowScreenShare: boolean('allow_screen_share').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

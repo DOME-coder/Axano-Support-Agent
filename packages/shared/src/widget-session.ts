@@ -19,6 +19,10 @@ export interface WidgetSessionResponse {
   avatar: {
     greeting: string;
     language: string;
+    // Phase-2 screen-share gate. The widget only renders the
+    // share button when this is true; the actual per-session
+    // consent modal still runs on top (ADR 007).
+    allowScreenShare: boolean;
   };
 }
 

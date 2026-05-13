@@ -13,6 +13,11 @@ export const avatarConfigPatchSchema = z.object({
   language: z.enum(LANGUAGE_CODES),
   personaPrompt: z.string().min(20).max(4000),
   greeting: z.string().min(1).max(500),
+  // Phase-2 screen-share gating. Default false on the server side
+  // (see migration 0002 + ADR 007); the tenant must explicitly opt
+  // their avatar in via the dashboard form before the widget will
+  // render a share button.
+  allowScreenShare: z.boolean(),
 });
 
 export type AvatarConfigPatch = z.infer<typeof avatarConfigPatchSchema>;

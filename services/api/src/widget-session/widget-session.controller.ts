@@ -117,6 +117,7 @@ export class WidgetSessionController {
       avatar: {
         greeting: config.greeting,
         language: config.language,
+        allowScreenShare: config.allowScreenShare,
       },
     };
   }

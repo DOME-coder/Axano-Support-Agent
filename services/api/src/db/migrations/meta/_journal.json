@@ -15,6 +15,13 @@
       "when": 1778492119302,
       "tag": "0001_adorable_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778653640526,
+      "tag": "0002_milky_drax",
+      "breakpoints": true
     }
   ]
 }

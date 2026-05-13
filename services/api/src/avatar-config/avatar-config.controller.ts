@@ -62,6 +62,7 @@ export class AvatarConfigController {
       personaPrompt: row.personaPrompt,
       greeting: row.greeting,
       isCustomAvatar: row.isCustomAvatar,
+      allowScreenShare: row.allowScreenShare,
     };
   }
 
@@ -87,6 +88,7 @@ export class AvatarConfigController {
         language: patch.language,
         personaPrompt: patch.personaPrompt,
         greeting: patch.greeting,
+        allowScreenShare: patch.allowScreenShare,
         updatedAt: new Date(),
       })
       .where(eq(avatarConfigs.tenantId, tenant.id))
@@ -109,6 +111,7 @@ export class AvatarConfigController {
       personaPrompt: row.personaPrompt,
       greeting: row.greeting,
       isCustomAvatar: row.isCustomAvatar,
+      allowScreenShare: row.allowScreenShare,
     };
   }
 }

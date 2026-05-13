@@ -1,0 +1,1 @@
+ALTER TABLE "avatar_configs" ADD COLUMN "allow_screen_share" boolean DEFAULT false NOT NULL;

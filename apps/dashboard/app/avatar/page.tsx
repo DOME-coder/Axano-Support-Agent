@@ -30,9 +30,22 @@ export default function AvatarPage() {
 
   useEffect(() => {
     if (configQuery.data && !form) {
-      const { beyAvatarId, elevenlabsVoiceId, language, personaPrompt, greeting } =
-        configQuery.data;
-      setForm({ beyAvatarId, elevenlabsVoiceId, language, personaPrompt, greeting });
+      const {
+        beyAvatarId,
+        elevenlabsVoiceId,
+        language,
+        personaPrompt,
+        greeting,
+        allowScreenShare,
+      } = configQuery.data;
+      setForm({
+        beyAvatarId,
+        elevenlabsVoiceId,
+        language,
+        personaPrompt,
+        greeting,
+        allowScreenShare,
+      });
     }
   }, [configQuery.data, form]);
 
@@ -50,6 +63,7 @@ export default function AvatarPage() {
         language: data.language,
         personaPrompt: data.personaPrompt,
         greeting: data.greeting,
+        allowScreenShare: data.allowScreenShare,
       });
       setSavedAt(Date.now());
       setFieldErrors({});
@@ -167,6 +181,31 @@ export default function AvatarPage() {
                 className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
             </Field>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form!.allowScreenShare}
+                  onChange={(e) => update('allowScreenShare', e.currentTarget.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span className="text-sm">
+                  <span className="block font-medium text-slate-800">
+                    Bildschirm-Sharing erlauben
+                  </span>
+                  <span className="block text-xs text-slate-600 mt-1">
+                    Endkunden können ihren Bildschirm teilen; der Avatar
+                    erkennt sichtbare UI-Elemente und gibt Klick-für-Klick-
+                    Hilfe. Frames werden an einen LLM-Anbieter (Anthropic)
+                    gesendet und nicht persistiert. Aktiviere diese Option
+                    nur, wenn deine Endkunden-Kontexte keine sensiblen
+                    Daten (Banking, Health, PII) enthalten können. Pro
+                    Session gibt der Endkunde zusätzlich aktive Einwilligung.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             <div className="flex items-center gap-3 pt-2">
               <button
