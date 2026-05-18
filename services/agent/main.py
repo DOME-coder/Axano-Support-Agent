@@ -102,6 +102,40 @@ SCREEN_VISION_HINT = (
 )
 
 
+def _log_tool_call(
+    api_client: ApiClient | None,
+    conversation_id: str | None,
+    tool_name: str,
+    query: str | None,
+    result: str,
+) -> None:
+    """Fire-and-forget persistence of a tool invocation as a `role=tool`
+    message. Used by the replay UI in the dashboard to render small
+    indicators inline with the transcript. We deliberately persist only
+    the short text snapshot — never frames, never PII (ADR 007)."""
+    if not api_client or not conversation_id:
+        return
+    # Cap content so even a chatty vision snapshot stays readable in
+    # the replay bubble. The marker prefix lets the dashboard route
+    # the message to the right renderer.
+    body = result if not query else f"query: {query}\n{result}"
+    truncated = body[:500]
+    content = f"[{tool_name}] {truncated}"
+    try:
+        asyncio.create_task(
+            api_client.append_message(
+                conversation_id=conversation_id,
+                role="tool",
+                content=content,
+            )
+        )
+    except RuntimeError:
+        # No running event loop — happens only in pathological test
+        # setups; safe to drop silently because the tool's own return
+        # value is what the LLM cares about.
+        pass
+
+
 class ConversationalAgent(Agent):
     """Phase-1 conversational agent with RAG tool.
 
@@ -133,15 +167,25 @@ class ConversationalAgent(Agent):
         tools = []
         full_instructions = instructions
         if tenant_id and api_client:
-            tools.append(self._build_search_tool(tenant_id, api_client))
+            tools.append(
+                self._build_search_tool(tenant_id, api_client, conversation_id)
+            )
             full_instructions = full_instructions + RAG_GROUNDING_HINT
         if conversation_id and redis_client is not None:
-            tools.append(self._build_analyze_screen_tool(conversation_id, redis_client))
+            tools.append(
+                self._build_analyze_screen_tool(
+                    conversation_id, redis_client, api_client
+                )
+            )
             full_instructions = full_instructions + SCREEN_VISION_HINT
         super().__init__(instructions=full_instructions, tools=tools)
 
     @staticmethod
-    def _build_search_tool(tenant_id: str, api_client: ApiClient):
+    def _build_search_tool(
+        tenant_id: str,
+        api_client: ApiClient,
+        conversation_id: str | None,
+    ):
         log = structlog.get_logger(__name__)
 
         @function_tool(
@@ -157,18 +201,25 @@ class ConversationalAgent(Agent):
             log.info("rag tool called", query_chars=len(query))
             hits = await api_client.search_knowledge(tenant_id, query, top_k=5)
             if not hits:
-                return "Keine relevanten Treffer in der Wissensdatenbank."
-            # Format as a numbered list so the LLM can cite content
-            # without confusing itself with delimiters.
-            lines: list[str] = []
-            for idx, hit in enumerate(hits, start=1):
-                lines.append(f"[{idx}] (sim={hit.similarity:.2f})\n{hit.content}")
-            return "\n\n".join(lines)
+                result = "Keine relevanten Treffer in der Wissensdatenbank."
+            else:
+                # Format as a numbered list so the LLM can cite content
+                # without confusing itself with delimiters.
+                lines: list[str] = []
+                for idx, hit in enumerate(hits, start=1):
+                    lines.append(f"[{idx}] (sim={hit.similarity:.2f})\n{hit.content}")
+                result = "\n\n".join(lines)
+            _log_tool_call(api_client, conversation_id, "search_knowledge_base", query, result)
+            return result
 
         return search_knowledge_base
 
     @staticmethod
-    def _build_analyze_screen_tool(conversation_id: str, redis_client: redis_async.Redis):
+    def _build_analyze_screen_tool(
+        conversation_id: str,
+        redis_client: redis_async.Redis,
+        api_client: ApiClient | None,
+    ):
         log = structlog.get_logger(__name__)
         redis_key = f"vision:latest:{conversation_id}"
 
@@ -192,19 +243,24 @@ class ConversationalAgent(Agent):
                 # also should never crash the conversation. Tell the LLM
                 # the truth so it can apologize gracefully.
                 log.error("analyze_screen redis read failed", error=str(exc))
-                return (
+                result = (
                     "Die Bildschirm-Analyse ist gerade nicht erreichbar. "
                     "Bitte versuche es in wenigen Sekunden erneut."
                 )
+                _log_tool_call(api_client, conversation_id, "analyze_screen", None, result)
+                return result
             if not snapshot:
                 log.info("analyze_screen called but no snapshot present")
-                return (
+                result = (
                     "Der Endkunde teilt aktuell keinen Bildschirm, oder die "
                     "Analyse ist noch nicht verfügbar. Bitte ihn, im Modal "
                     "auf den Bildschirm-Teilen-Button zu klicken und ein "
                     "paar Sekunden zu warten."
                 )
+                _log_tool_call(api_client, conversation_id, "analyze_screen", None, result)
+                return result
             log.info("analyze_screen returned snapshot", chars=len(snapshot))
+            _log_tool_call(api_client, conversation_id, "analyze_screen", None, snapshot)
             return snapshot
 
         return analyze_screen
@@ -343,8 +399,10 @@ async def entrypoint(ctx: JobContext) -> None:
     session.on("agent_false_interruption", _on_false_interruption)
 
     # Persist every user/assistant turn. The event fires once per
-    # committed conversation item; tool calls are excluded here (we
-    # log them in phase-2 analytics).
+    # committed conversation item; tool calls are excluded here and
+    # logged directly from the tool closures via _log_tool_call so
+    # the replay UI can render a single, well-formatted bubble per
+    # invocation.
     if api_client and conversation_id:
 
         def _persist_item(event: ConversationItemAddedEvent) -> None:
