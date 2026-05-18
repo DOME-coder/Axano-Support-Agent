@@ -49,3 +49,30 @@ export async function fetchWidgetSession(input: {
 
   return (await response.json()) as WidgetSessionResponse;
 }
+
+export async function submitCsat(input: {
+  apiUrl: string;
+  tenantApiKey: string;
+  conversationId: string;
+  score: number;
+  comment?: string;
+}): Promise<void> {
+  const body: { score: number; comment?: string } = { score: input.score };
+  if (input.comment && input.comment.trim().length > 0) {
+    body.comment = input.comment.trim();
+  }
+  const response = await fetch(
+    `${input.apiUrl}/api/widget-session/${encodeURIComponent(input.conversationId)}/csat`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-API-Key': input.tenantApiKey,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`csat ${response.status}`);
+  }
+}

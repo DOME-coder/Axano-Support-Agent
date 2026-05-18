@@ -238,6 +238,104 @@ export const WIDGET_STYLES = `
   outline-offset: 2px;
 }
 
+.avatardesk-csat {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 13, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 11;
+}
+.avatardesk-csat__card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.avatardesk-csat__title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: #1b1b1f;
+}
+.avatardesk-csat__subtitle {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #666;
+  margin: 0 0 16px;
+}
+.avatardesk-csat__stars {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.avatardesk-csat__star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 30px;
+  line-height: 1;
+  padding: 4px;
+  color: #d8d8de;
+  transition: color 80ms ease, transform 80ms ease;
+}
+.avatardesk-csat__star:hover,
+.avatardesk-csat__star:focus-visible {
+  color: #f5b400;
+  outline: none;
+  transform: scale(1.1);
+}
+.avatardesk-csat__star[aria-checked="true"] { color: #f5b400; }
+.avatardesk-csat__comment {
+  width: 100%;
+  min-height: 70px;
+  padding: 8px 10px;
+  border: 1px solid #d8d8de;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 14px;
+}
+.avatardesk-csat__comment:focus-visible {
+  outline: 2px solid #4f8cff;
+  outline-offset: 1px;
+}
+.avatardesk-csat__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.avatardesk-csat__btn {
+  border-radius: 8px;
+  border: 1px solid #d8d8de;
+  background: #fff;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.avatardesk-csat__btn--primary {
+  background: #1b1b1f;
+  color: #fff;
+  border-color: #1b1b1f;
+}
+.avatardesk-csat__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.avatardesk-csat__btn:focus-visible {
+  outline: 2px solid #4f8cff;
+  outline-offset: 2px;
+}
+.avatardesk-csat__thanks {
+  text-align: center;
+  font-size: 14px;
+  color: #1b1b1f;
+  padding: 24px 0;
+}
+
 .avatardesk-modal__footer {
   padding: 12px 16px;
   border-top: 1px solid #e8e8ee;

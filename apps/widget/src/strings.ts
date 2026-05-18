@@ -30,6 +30,13 @@ export type StringKey =
   | 'screen.consent.accept'
   | 'screen.consent.cancel'
   | 'placeholder.waitingForAvatar'
+  | 'csat.title'
+  | 'csat.subtitle'
+  | 'csat.starAria'
+  | 'csat.commentPlaceholder'
+  | 'csat.submit'
+  | 'csat.skip'
+  | 'csat.thanks'
   | 'footer.poweredBy';
 
 const TABLE: Record<Locale, Record<StringKey, string>> = {
@@ -64,6 +71,13 @@ const TABLE: Record<Locale, Record<StringKey, string>> = {
     'screen.consent.accept': 'Verstanden, teilen',
     'screen.consent.cancel': 'Abbrechen',
     'placeholder.waitingForAvatar': 'Avatar lädt…',
+    'csat.title': 'Wie war dein Gespräch mit Sofia?',
+    'csat.subtitle': 'Deine Bewertung hilft uns, besser zu werden.',
+    'csat.starAria': 'Sterne',
+    'csat.commentPlaceholder': 'Was sollten wir wissen? (optional)',
+    'csat.submit': 'Senden',
+    'csat.skip': 'Überspringen',
+    'csat.thanks': 'Danke für deine Bewertung!',
     'footer.poweredBy': 'powered by AvatarDesk',
   },
   en: {
@@ -97,6 +111,13 @@ const TABLE: Record<Locale, Record<StringKey, string>> = {
     'screen.consent.accept': 'Got it, share',
     'screen.consent.cancel': 'Cancel',
     'placeholder.waitingForAvatar': 'Loading avatar…',
+    'csat.title': 'How was your conversation with Sofia?',
+    'csat.subtitle': 'Your rating helps us improve.',
+    'csat.starAria': 'stars',
+    'csat.commentPlaceholder': 'Anything we should know? (optional)',
+    'csat.submit': 'Send',
+    'csat.skip': 'Skip',
+    'csat.thanks': 'Thanks for your feedback!',
     'footer.poweredBy': 'powered by AvatarDesk',
   },
 };

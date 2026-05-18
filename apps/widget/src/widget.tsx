@@ -9,8 +9,13 @@ import {
   readActiveConversationId,
   writeActiveConversationId,
 } from './conversation-storage';
-import { fetchWidgetSession } from './session';
+import { fetchWidgetSession, submitCsat } from './session';
 import { t, type StringKey } from './strings';
+
+// Below this conversation length we don't bother the user with a
+// rating prompt — they barely had time to form an opinion and the
+// score would mostly be noise.
+const CSAT_MIN_DURATION_MS = 30_000;
 
 interface WidgetProps {
   apiUrl: string;
@@ -44,6 +49,19 @@ export function Widget(props: WidgetProps) {
   const [screenShareEnabled, setScreenShareEnabled] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [screenShareError, setScreenShareError] = useState<string | null>(null);
+  // CSAT state. conversationId + connectedAtMs are captured at session
+  // start so we can decide on close whether to show the overlay. The
+  // submittedRef guards against re-prompting after a user already
+  // rated within the same session (the modal can be closed twice if
+  // the close button is hit during the "thanks" step).
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [connectedAtMs, setConnectedAtMs] = useState<number | null>(null);
+  const [showCsat, setShowCsat] = useState(false);
+  const [csatScore, setCsatScore] = useState(0);
+  const [csatComment, setCsatComment] = useState('');
+  const [csatSubmitting, setCsatSubmitting] = useState(false);
+  const [csatThanks, setCsatThanks] = useState(false);
+  const csatSubmittedRef = useRef(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const handleRef = useRef<RoomHandle | null>(null);
@@ -75,6 +93,8 @@ export function Widget(props: WidgetProps) {
         writeActiveConversationId(session.conversationId);
         if (!cancelled) {
           setAllowScreenShare(session.avatar.allowScreenShare);
+          setConversationId(session.conversationId);
+          setConnectedAtMs(Date.now());
         }
         const handle = await connect({
           url: session.url,
@@ -152,6 +172,14 @@ export function Widget(props: WidgetProps) {
       setScreenShareEnabled(false);
       setShowConsent(false);
       setScreenShareError(null);
+      setConversationId(null);
+      setConnectedAtMs(null);
+      setShowCsat(false);
+      setCsatScore(0);
+      setCsatComment('');
+      setCsatSubmitting(false);
+      setCsatThanks(false);
+      csatSubmittedRef.current = false;
     };
   }, [open, props.apiUrl, props.tenantApiKey]);
 
@@ -208,6 +236,58 @@ export function Widget(props: WidgetProps) {
     setShowConsent(false);
   };
 
+  const handleCloseClick = () => {
+    // Show the CSAT overlay only once per session, only if the user
+    // had enough time to form an opinion, and only if the API actually
+    // gave us a conversationId to attach the score to.
+    const eligible =
+      !csatSubmittedRef.current &&
+      conversationId !== null &&
+      connectedAtMs !== null &&
+      Date.now() - connectedAtMs >= CSAT_MIN_DURATION_MS;
+    if (eligible && !showCsat) {
+      setShowCsat(true);
+      return;
+    }
+    setOpen(false);
+  };
+
+  const submitCsatNow = async () => {
+    if (!conversationId || csatScore < 1 || csatScore > 5) {
+      return;
+    }
+    setCsatSubmitting(true);
+    try {
+      await submitCsat({
+        apiUrl: props.apiUrl,
+        tenantApiKey: props.tenantApiKey,
+        conversationId,
+        score: csatScore,
+        comment: csatComment,
+      });
+      csatSubmittedRef.current = true;
+      setCsatThanks(true);
+      // Short visual confirmation before the modal goes away so the
+      // submit doesn't feel like a no-op. The cleanup useEffect resets
+      // state when `open` flips to false.
+      window.setTimeout(() => {
+        setOpen(false);
+      }, 1200);
+    } catch (err) {
+      console.error('AvatarDesk: csat submit failed', err);
+      // Soft failure: close anyway, the score is best-effort. The
+      // dashboard will just not see this rating.
+      setOpen(false);
+    } finally {
+      setCsatSubmitting(false);
+    }
+  };
+
+  const skipCsat = () => {
+    csatSubmittedRef.current = true;
+    setOpen(false);
+  };
+
   const stopShare = async () => {
     if (!handleRef.current) {
       return;
@@ -250,7 +330,7 @@ export function Widget(props: WidgetProps) {
             <button
               class="avatardesk-modal__close"
               aria-label={t('modal.close')}
-              onClick={() => setOpen(false)}
+              onClick={handleCloseClick}
             >
               ×
             </button>
@@ -283,6 +363,68 @@ export function Widget(props: WidgetProps) {
                       {t('screen.consent.accept')}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            {showCsat && (
+              <div class="avatardesk-csat" role="dialog" aria-modal="true">
+                <div class="avatardesk-csat__card">
+                  {csatThanks ? (
+                    <div class="avatardesk-csat__thanks" role="status">
+                      {t('csat.thanks')}
+                    </div>
+                  ) : (
+                    <>
+                      <h3 class="avatardesk-csat__title">{t('csat.title')}</h3>
+                      <p class="avatardesk-csat__subtitle">{t('csat.subtitle')}</p>
+                      <div
+                        class="avatardesk-csat__stars"
+                        role="radiogroup"
+                        aria-label={t('csat.starAria')}
+                      >
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            role="radio"
+                            aria-checked={csatScore === n}
+                            aria-label={`${n} / 5`}
+                            class="avatardesk-csat__star"
+                            onClick={() => setCsatScore(n)}
+                          >
+                            {n <= csatScore ? '★' : '☆'}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        class="avatardesk-csat__comment"
+                        placeholder={t('csat.commentPlaceholder')}
+                        maxLength={500}
+                        value={csatComment}
+                        onInput={(e) =>
+                          setCsatComment((e.currentTarget as HTMLTextAreaElement).value)
+                        }
+                      />
+                      <div class="avatardesk-csat__actions">
+                        <button
+                          type="button"
+                          class="avatardesk-csat__btn"
+                          onClick={skipCsat}
+                          disabled={csatSubmitting}
+                        >
+                          {t('csat.skip')}
+                        </button>
+                        <button
+                          type="button"
+                          class="avatardesk-csat__btn avatardesk-csat__btn--primary"
+                          onClick={submitCsatNow}
+                          disabled={csatScore < 1 || csatSubmitting}
+                        >
+                          {t('csat.submit')}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
