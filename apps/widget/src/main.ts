@@ -81,3 +81,21 @@ function init(options?: InitOptions): void {
 }
 
 window.AvatarDesk = { init };
+
+// Diagnostic: warn loudly if vite HMR pings while a widget is mounted.
+// HMR unmounts and remounts the preact tree, which causes the running
+// livekit room to disconnect mid-publish.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const hot = (import.meta as any).hot;
+if (hot && typeof hot.on === 'function') {
+  // eslint-disable-next-line no-console
+  console.log('AvatarDesk: vite HMR is active in this dev build');
+  hot.on('vite:beforeUpdate', (payload: unknown) => {
+    // eslint-disable-next-line no-console
+    console.warn('AvatarDesk: vite HMR vite:beforeUpdate fired', payload);
+  });
+  hot.on('vite:afterUpdate', (payload: unknown) => {
+    // eslint-disable-next-line no-console
+    console.warn('AvatarDesk: vite HMR vite:afterUpdate fired', payload);
+  });
+}

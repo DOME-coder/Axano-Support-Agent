@@ -49,16 +49,22 @@ export function Widget(props: WidgetProps) {
   const handleRef = useRef<RoomHandle | null>(null);
 
   useEffect(() => {
+    const effectId = Math.random().toString(36).slice(2, 8);
+    // eslint-disable-next-line no-console
+    console.log(
+      'AvatarDesk widget: useEffect ENTERED id=' + effectId +
+        ' open=' + open + ' videoRef=' + (videoRef.current ? 'set' : 'null'),
+    );
     if (!open || !videoRef.current) {
+      // eslint-disable-next-line no-console
+      console.log('AvatarDesk widget: useEffect SKIP id=' + effectId);
       return;
     }
     let cancelled = false;
     const videoEl = videoRef.current;
 
     // eslint-disable-next-line no-console
-    console.log(
-      'AvatarDesk widget: useEffect MOUNT (open=' + open + ', apiUrl=' + props.apiUrl + ')',
-    );
+    console.log('AvatarDesk widget: useEffect WILL_CONNECT id=' + effectId);
 
     setState('connecting');
     setMicError(null);
@@ -110,10 +116,16 @@ export function Widget(props: WidgetProps) {
           },
         });
         if (cancelled) {
+          // eslint-disable-next-line no-console
+          console.log(
+            'AvatarDesk widget: post-connect CANCEL_DISCONNECT id=' + effectId,
+          );
           await handle.disconnect();
           return;
         }
         handleRef.current = handle;
+        // eslint-disable-next-line no-console
+        console.log('AvatarDesk widget: handle STORED id=' + effectId);
 
         // Auto-enable microphone after the room is up so the user can
         // start speaking without a second click. If the browser denies
@@ -145,7 +157,8 @@ export function Widget(props: WidgetProps) {
     return () => {
       // eslint-disable-next-line no-console
       console.log(
-        'AvatarDesk widget: useEffect CLEANUP — calling disconnect()',
+        'AvatarDesk widget: useEffect RETURN_CLEANUP id=' + effectId +
+          ' handleRef=' + (handleRef.current ? 'set' : 'null'),
         new Error().stack,
       );
       cancelled = true;
