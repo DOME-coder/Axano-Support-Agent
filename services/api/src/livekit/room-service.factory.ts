@@ -36,4 +36,43 @@ export class RoomServiceClient {
   async createRoom(opts: { name: string; metadata?: string; emptyTimeout?: number }) {
     return this.inner.createRoom(opts);
   }
+
+  /**
+   * Idempotent: creates the room if it doesn't exist yet, otherwise
+   * writes the metadata to the existing room. Either way the room
+   * carries the given metadata once this resolves.
+   *
+   * Without this, two failure modes leave livekit rooms without the
+   * `{conversationId}` metadata that the agents read at dispatch:
+   *  (1) resume path — the widget reuses an existing conversation, we
+   *      skip createRoom, and the cloud-side room may have been evicted
+   *      via emptyTimeout in the meantime; the next join then lazy-
+   *      creates it without metadata.
+   *  (2) the rare race where createRoom 4xx's on an already-existing
+   *      room from a previous test session.
+   * In both cases the vision-worker entrypoint sees an empty metadata
+   * field, logs `no conversation id in room metadata`, and exits — the
+   * analyze_screen tool then has no redis snapshot to read.
+   */
+  async ensureRoomMetadata(opts: {
+    name: string;
+    metadata: string;
+    emptyTimeout?: number;
+  }): Promise<void> {
+    try {
+      await this.inner.createRoom(opts);
+      return;
+    } catch (err) {
+      const message = (err as Error).message ?? '';
+      // The cloud returns the protobuf-style "AlreadyExists" / "exists"
+      // — we don't depend on an exact error code because the SDK
+      // surfaces it differently across versions.
+      if (!/already.?exists|exists/i.test(message)) {
+        throw err;
+      }
+    }
+    // Room already there → just stamp the metadata. updateRoomMetadata
+    // is safe to call repeatedly with the same payload.
+    await this.inner.updateRoomMetadata(opts.name, opts.metadata);
+  }
 }

@@ -80,27 +80,26 @@ export class WidgetSessionController {
         );
       }
       conversation = created;
-
-      // Pre-create the LiveKit room with conversationId in metadata so
-      // the agent can pull it from ctx.room.metadata and look up the
-      // tenant config via the internal api. Failures here are
-      // recoverable — LiveKit will lazily create the room on the
-      // first participant join, but then without our metadata, so we
-      // log and continue rather than 500ing the widget.
-      try {
-        await this.rooms.createRoom({
-          name: conversation.livekitRoomId,
-          metadata: JSON.stringify({ conversationId: conversation.id }),
-          emptyTimeout: 60,
-        });
-      } catch (err) {
-        this.logger.warn(
-          `livekit createRoom failed for ${conversation.livekitRoomId}: ${(err as Error).message}`,
-        );
-      }
     } else {
       this.logger.log(
         `widget-session resumed conversation ${conversation.id} for tenant ${tenant.id}`,
+      );
+    }
+
+    // Ensure the livekit room exists AND carries the conversationId in
+    // its metadata. Runs in BOTH paths — without it, a resumed
+    // conversation whose room got evicted (emptyTimeout: 60) would join
+    // a freshly-lazy-created room without metadata, and the
+    // vision-worker would exit silently at dispatch time.
+    try {
+      await this.rooms.ensureRoomMetadata({
+        name: conversation.livekitRoomId,
+        metadata: JSON.stringify({ conversationId: conversation.id }),
+        emptyTimeout: 60,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `livekit ensureRoomMetadata failed for ${conversation.livekitRoomId}: ${(err as Error).message}`,
       );
     }
 
