@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, smallint, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, smallint, numeric, text } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants';
 
 // One row per end-user conversation. The end_user_id is anonymous
@@ -20,6 +20,7 @@ export const conversations = pgTable('conversations', {
   language: varchar('language', { length: 8 }).notNull().default('de'),
   resolution: varchar('resolution', { length: 20 }).notNull().default('pending'),
   csatScore: smallint('csat_score'),
+  csatComment: text('csat_comment'),
   beyMinutesUsed: numeric('bey_minutes_used', { precision: 8, scale: 2 })
     .notNull()
     .default('0'),

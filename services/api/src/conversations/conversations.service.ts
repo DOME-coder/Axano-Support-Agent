@@ -7,6 +7,9 @@ import type {
   ConversationMessageItem,
   ConversationResolution,
   ConversationsListResponse,
+  EscalationItem,
+  EscalationStatus,
+  EscalationTarget,
   MessageRole,
 } from '@avatardesk/shared';
 
@@ -17,9 +20,17 @@ interface ConversationRow extends Record<string, unknown> {
   language: string;
   resolution: string;
   csat_score: number | null;
+  csat_comment: string | null;
   bey_minutes_used: string;
   message_count: string; // pg count() returns text
   has_vision: boolean;
+}
+
+interface EscalationRow extends Record<string, unknown> {
+  reason: string;
+  status: string;
+  target: string;
+  created_at: Date;
 }
 
 interface MessageRow extends Record<string, unknown> {
@@ -78,6 +89,7 @@ export class ConversationsService {
         c.language,
         c.resolution,
         c.csat_score,
+        c.csat_comment,
         c.bey_minutes_used,
         (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count,
         EXISTS (
@@ -122,6 +134,7 @@ export class ConversationsService {
         c.language,
         c.resolution,
         c.csat_score,
+        c.csat_comment,
         c.bey_minutes_used,
         (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count,
         EXISTS (
@@ -161,8 +174,31 @@ export class ConversationsService {
       audioDurationMs: m.audio_duration_ms,
     }));
 
+    // Most-recent escalation per conversation. Phase 2 only ever
+    // writes one, but the limit is defensive so a future re-escalate
+    // path doesn't surface a stale one.
+    const escalationResult = await this.db.execute<EscalationRow>(sql`
+      SELECT reason, status, target, created_at
+      FROM escalations
+      WHERE conversation_id = ${conversationId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    const escalationRows = extractRows<EscalationRow>(escalationResult);
+    const escalationRow = escalationRows[0];
+    const escalation: EscalationItem | null = escalationRow
+      ? {
+          reason: escalationRow.reason,
+          status: escalationRow.status as EscalationStatus,
+          target: escalationRow.target as EscalationTarget,
+          createdAt: escalationRow.created_at.toISOString(),
+        }
+      : null;
+
     return {
       ...rowToListItem(header),
+      csatComment: header.csat_comment,
+      escalation,
       messages,
     };
   }

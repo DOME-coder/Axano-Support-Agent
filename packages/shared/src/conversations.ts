@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { EscalationItem } from './escalations';
 
 // Shared schemas for the dashboard conversations / replay UI. The
 // list endpoint is paginated; detail returns header + chronological
@@ -52,5 +53,7 @@ export interface ConversationMessageItem {
 }
 
 export interface ConversationDetail extends ConversationListItem {
+  csatComment: string | null;
+  escalation: EscalationItem | null;
   messages: ConversationMessageItem[];
 }
