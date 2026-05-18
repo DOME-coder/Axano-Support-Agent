@@ -49,7 +49,26 @@ function resolveConfig(options?: InitOptions): ResolvedConfig | null {
   return { apiUrl: apiUrl.replace(/\/$/, ''), tenantApiKey };
 }
 
+// Diagnostic: counts init() calls so we can spot double-mounts (HMR,
+// duplicate <script> tag, etc.) that would create two Widget trees
+// fighting for the same livekit room. Logged so the value shows up
+// in the browser console at module load.
+let initCount = 0;
+
 function init(options?: InitOptions): void {
+  initCount += 1;
+  // eslint-disable-next-line no-console
+  console.log('AvatarDesk: init() called, count=' + initCount, new Error().stack);
+  const existing = document.querySelectorAll('[data-avatardesk]');
+  if (existing.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      'AvatarDesk: another widget host already exists in the DOM (' +
+        existing.length +
+        '). Skipping this init() to avoid duplicate-mount.',
+    );
+    return;
+  }
   const config = resolveConfig(options);
   if (!config) {
     return;

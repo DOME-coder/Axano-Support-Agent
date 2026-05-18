@@ -55,6 +55,11 @@ export function Widget(props: WidgetProps) {
     let cancelled = false;
     const videoEl = videoRef.current;
 
+    // eslint-disable-next-line no-console
+    console.log(
+      'AvatarDesk widget: useEffect MOUNT (open=' + open + ', apiUrl=' + props.apiUrl + ')',
+    );
+
     setState('connecting');
     setMicError(null);
 
@@ -138,6 +143,11 @@ export function Widget(props: WidgetProps) {
     })();
 
     return () => {
+      // eslint-disable-next-line no-console
+      console.log(
+        'AvatarDesk widget: useEffect CLEANUP — calling disconnect()',
+        new Error().stack,
+      );
       cancelled = true;
       if (handleRef.current) {
         handleRef.current.disconnect();
