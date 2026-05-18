@@ -49,24 +49,11 @@ function resolveConfig(options?: InitOptions): ResolvedConfig | null {
   return { apiUrl: apiUrl.replace(/\/$/, ''), tenantApiKey };
 }
 
-// Diagnostic: counts init() calls so we can spot double-mounts (HMR,
-// duplicate <script> tag, etc.) that would create two Widget trees
-// fighting for the same livekit room. Logged so the value shows up
-// in the browser console at module load.
-let initCount = 0;
-
 function init(options?: InitOptions): void {
-  initCount += 1;
-  // eslint-disable-next-line no-console
-  console.log('AvatarDesk: init() called, count=' + initCount, new Error().stack);
-  const existing = document.querySelectorAll('[data-avatardesk]');
-  if (existing.length > 0) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      'AvatarDesk: another widget host already exists in the DOM (' +
-        existing.length +
-        '). Skipping this init() to avoid duplicate-mount.',
-    );
+  // Guard against duplicate mounts. Two trees competing for the same
+  // livekit room cause the publish/disconnect loop we hit during
+  // welle-A verification on 2026-05-18.
+  if (document.querySelectorAll('[data-avatardesk]').length > 0) {
     return;
   }
   const config = resolveConfig(options);
@@ -81,21 +68,3 @@ function init(options?: InitOptions): void {
 }
 
 window.AvatarDesk = { init };
-
-// Diagnostic: warn loudly if vite HMR pings while a widget is mounted.
-// HMR unmounts and remounts the preact tree, which causes the running
-// livekit room to disconnect mid-publish.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hot = (import.meta as any).hot;
-if (hot && typeof hot.on === 'function') {
-  // eslint-disable-next-line no-console
-  console.log('AvatarDesk: vite HMR is active in this dev build');
-  hot.on('vite:beforeUpdate', (payload: unknown) => {
-    // eslint-disable-next-line no-console
-    console.warn('AvatarDesk: vite HMR vite:beforeUpdate fired', payload);
-  });
-  hot.on('vite:afterUpdate', (payload: unknown) => {
-    // eslint-disable-next-line no-console
-    console.warn('AvatarDesk: vite HMR vite:afterUpdate fired', payload);
-  });
-}

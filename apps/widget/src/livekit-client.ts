@@ -72,11 +72,7 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
     },
   );
 
-  room.on(RoomEvent.Disconnected, (reason) => {
-    // eslint-disable-next-line no-console
-    console.log('AvatarDesk livekit: RoomEvent.Disconnected reason=' + reason);
-    onState('idle');
-  });
+  room.on(RoomEvent.Disconnected, () => onState('idle'));
   room.on(RoomEvent.Reconnecting, () => onState('connecting'));
   room.on(RoomEvent.Reconnected, () => onState('connected'));
 
@@ -132,8 +128,6 @@ export async function connect(options: ConnectOptions): Promise<RoomHandle> {
 
   return {
     disconnect: async () => {
-      // eslint-disable-next-line no-console
-      console.log('AvatarDesk livekit: room.disconnect() called by widget');
       if (levelTimer) {
         clearInterval(levelTimer);
       }
