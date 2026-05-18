@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { RoomServiceClient as SdkRoomServiceClient } from 'livekit-server-sdk';
+import {
+  RoomServiceClient as SdkRoomServiceClient,
+  RoomAgentDispatch,
+} from 'livekit-server-sdk';
 
 // Thin DI wrapper around livekit-server-sdk's RoomServiceClient so
 // the controller and tests can depend on a Nest provider rather
@@ -57,8 +60,14 @@ export class RoomServiceClient {
   async ensureRoomMetadata(opts: {
     name: string;
     metadata: string;
+    agents: RoomAgentDispatch[];
     emptyTimeout?: number;
   }): Promise<void> {
+    // Critical: agents MUST be passed to createRoom. Once the room
+    // exists server-side, the token's roomConfig.agents is ignored on
+    // subsequent participant joins — the cloud uses the server-side
+    // room config instead. Without agents here, the conversational
+    // agent and vision-worker never get dispatched.
     try {
       await this.inner.createRoom(opts);
       return;
@@ -71,8 +80,9 @@ export class RoomServiceClient {
         throw err;
       }
     }
-    // Room already there → just stamp the metadata. updateRoomMetadata
-    // is safe to call repeatedly with the same payload.
+    // Room already there → stamp the metadata. The existing room
+    // already carries the agents list from its initial create, so we
+    // do not need to touch dispatch here.
     await this.inner.updateRoomMetadata(opts.name, opts.metadata);
   }
 }

@@ -14,10 +14,12 @@ import {
   type WidgetSessionResponse,
 } from '@avatardesk/shared';
 import { and, eq, isNull } from 'drizzle-orm';
+import { RoomAgentDispatch } from 'livekit-server-sdk';
 import { CurrentTenant } from '../auth/current-tenant.decorator';
 import { TenantApiKeyGuard } from '../auth/tenant-api-key.guard';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
 import { avatarConfigs, conversations, type Tenant } from '../db/schema';
+import { ROOM_AGENT_NAMES } from '../livekit/room-agents';
 import { RoomServiceClient } from '../livekit/room-service.factory';
 import { TokenIssuerService } from '../livekit/token-issuer.service';
 
@@ -87,16 +89,22 @@ export class WidgetSessionController {
     }
 
     // Ensure the livekit room exists AND carries the conversationId in
-    // its metadata. Runs in BOTH paths — without it, a resumed
-    // conversation whose room got evicted (emptyTimeout: 60) would join
-    // a freshly-lazy-created room without metadata, and the
-    // vision-worker would exit silently at dispatch time.
+    // its metadata AND has the agent dispatch list. Runs in BOTH paths
+    // — without the agents list at room-creation time, livekit cloud
+    // ignores the token's roomConfig on subsequent joins (once the
+    // server-side room exists, server-side config wins), so neither
+    // worker would receive a dispatch. The token still carries the
+    // agents list as a fallback for the first-time auto-create case.
     try {
       await this.rooms.ensureRoomMetadata({
         name: conversation.livekitRoomId,
         metadata: JSON.stringify({ conversationId: conversation.id }),
+        agents: ROOM_AGENT_NAMES.map((agentName) => new RoomAgentDispatch({ agentName })),
         emptyTimeout: 60,
       });
+      this.logger.log(
+        `ensured livekit room ${conversation.livekitRoomId} with agents=[${ROOM_AGENT_NAMES.join(',')}]`,
+      );
     } catch (err) {
       this.logger.warn(
         `livekit ensureRoomMetadata failed for ${conversation.livekitRoomId}: ${(err as Error).message}`,
