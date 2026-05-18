@@ -78,6 +78,27 @@ def _validate_env() -> None:
     log.info("env validation ok", required_count=len(REQUIRED_ENV_VARS))
 
 
+# Per-language directive prepended to RAG/Vision/Escalation hints so
+# the LLM responds in the configured language even if the underlying
+# tool descriptions and grounding rules are written in German. We
+# keep the tool-side strings in German on purpose: rewriting them per
+# language would double the agent surface for no measurable win on
+# DE+EN — Sonnet trivially translates a tool description it reads
+# only as an internal instruction. The user-facing reply stays in the
+# language the directive below names.
+LANGUAGE_PERSONA_HINTS: dict[str, str] = {
+    "de": (
+        "\n\nAntworte ausschließlich auf Deutsch — auch wenn der Endkunde "
+        "in einer anderen Sprache schreibt, antworte auf Deutsch."
+    ),
+    "en": (
+        "\n\nAlways respond in English — even if internal tool outputs or "
+        "knowledge-base excerpts are in another language, translate them "
+        "into clear English for the end user."
+    ),
+}
+
+
 RAG_GROUNDING_HINT = (
     "\n\nWICHTIG: Bei inhaltlichen Fragen rufst du IMMER zuerst das "
     "Tool `search_knowledge_base` mit einer kurzen Suchanfrage auf. "
@@ -164,6 +185,7 @@ class ConversationalAgent(Agent):
         api_client: ApiClient | None,
         conversation_id: str | None = None,
         redis_client: redis_async.Redis | None = None,
+        language: str = "de",
     ) -> None:
         self._tenant_id = tenant_id
         self._api_client = api_client
@@ -175,7 +197,11 @@ class ConversationalAgent(Agent):
         # vision-worker's snapshot. In fallback mode (e.g. dev run
         # without metadata) we run as a plain chatty agent.
         tools = []
-        full_instructions = instructions
+        # Language directive comes FIRST so every subsequent hint and
+        # every tool description is read by the LLM through the lens
+        # of the target output language.
+        language_hint = LANGUAGE_PERSONA_HINTS.get(language, LANGUAGE_PERSONA_HINTS["de"])
+        full_instructions = instructions + language_hint
         if tenant_id and api_client:
             tools.append(
                 self._build_search_tool(tenant_id, api_client, conversation_id)
@@ -490,6 +516,7 @@ async def entrypoint(ctx: JobContext) -> None:
             api_client=api_client,
             conversation_id=conversation_id,
             redis_client=redis_client,
+            language=language,
         ),
         room=ctx.room,
     )
