@@ -8,6 +8,7 @@ import { fetchMe, logout } from '@/lib/api';
 const NAV = [
   { href: '/avatar', label: 'Avatar' },
   { href: '/knowledge', label: 'Wissen' },
+  { href: '/conversations', label: 'Konversationen' },
   { href: '/embed', label: 'Embed' },
 ];
 
