@@ -10,7 +10,7 @@ import {
   writeActiveConversationId,
 } from './conversation-storage';
 import { fetchWidgetSession, submitCsat } from './session';
-import { t, type StringKey } from './strings';
+import { setLocale, t, type StringKey } from './strings';
 
 // Below this conversation length we don't bother the user with a
 // rating prompt — they barely had time to form an opinion and the
@@ -91,6 +91,12 @@ export function Widget(props: WidgetProps) {
         // of starting fresh. Server-side validation guarantees this
         // can't bind to another tenant's conversation.
         writeActiveConversationId(session.conversationId);
+        // Pick the widget locale from the tenant's avatar config.
+        // Unknown codes fall back to 'de' so the widget never renders
+        // a bare string key. The cast is safe because only the keys
+        // that LANGUAGE_PERSONA_HINTS handles on the agent side will
+        // ever be set in the dashboard's allowed dropdown.
+        setLocale(session.avatar.language === 'en' ? 'en' : 'de');
         if (!cancelled) {
           setAllowScreenShare(session.avatar.allowScreenShare);
           setConversationId(session.conversationId);
