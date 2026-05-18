@@ -2,16 +2,10 @@
 
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocale, useTranslations } from 'next-intl';
 import type { KnowledgeSourceStatus } from '@avatardesk/shared';
 import { fetchKnowledgeSources, uploadKnowledgePdf } from '@/lib/knowledge-api';
 import { DashboardShell } from '@/components/dashboard-shell';
-
-const STATUS_LABEL: Record<KnowledgeSourceStatus, string> = {
-  pending: 'wartet',
-  indexing: 'wird indexiert',
-  ready: 'bereit',
-  failed: 'fehlgeschlagen',
-};
 
 const STATUS_COLOR: Record<KnowledgeSourceStatus, string> = {
   pending: 'bg-slate-100 text-slate-600',
@@ -22,15 +16,22 @@ const STATUS_COLOR: Record<KnowledgeSourceStatus, string> = {
 
 export default function KnowledgePage() {
   const queryClient = useQueryClient();
+  const t = useTranslations('knowledge');
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const statusLabel: Record<KnowledgeSourceStatus, string> = {
+    pending: t('statusPending'),
+    indexing: t('statusIndexing'),
+    ready: t('statusReady'),
+    failed: t('statusFailed'),
+  };
 
   const sourcesQuery = useQuery({
     queryKey: ['knowledge-sources'],
     queryFn: fetchKnowledgeSources,
-    // Poll every 3 seconds so indexing -> ready transitions show
-    // up without manual refresh. Phase 2 can move this to SSE or
-    // websockets if the polling cost matters.
     refetchInterval: (q) => {
       const data = q.state.data;
       if (!data) {
@@ -67,21 +68,17 @@ export default function KnowledgePage() {
   }
 
   const sources = sourcesQuery.data?.sources ?? [];
+  const dateLocale = locale === 'en' ? 'en-US' : 'de-DE';
 
   return (
     <DashboardShell>
-      <h2 className="text-xl font-semibold mb-2">Wissensdatenbank</h2>
-      <p className="text-sm text-slate-500 mb-6">
-        PDFs hochladen, die der Avatar als Wissensquelle nutzt. Indexing
-        dauert ein paar Sekunden bis Minuten je nach Größe.
-      </p>
+      <h2 className="text-xl font-semibold mb-2">{t('title')}</h2>
+      <p className="text-sm text-slate-500 mb-6">{t('subtitle')}</p>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">PDF hochladen</span>
-          <span className="block text-xs text-slate-400 mb-2">
-            Max. 25 MB, nur PDF. Andere Formate kommen in Phase 2.
-          </span>
+          <span className="text-sm font-medium text-slate-700">{t('uploadLabel')}</span>
+          <span className="block text-xs text-slate-400 mb-2">{t('uploadHint')}</span>
           <input
             ref={fileInputRef}
             type="file"
@@ -92,26 +89,30 @@ export default function KnowledgePage() {
           />
         </label>
         {uploadMutation.isPending && (
-          <p className="text-sm text-slate-500 mt-2">Lade hoch…</p>
+          <p className="text-sm text-slate-500 mt-2">{t('uploading')}</p>
         )}
-        {error && <p className="text-sm text-red-600 mt-2">Fehler: {error}</p>}
+        {error && (
+          <p className="text-sm text-red-600 mt-2">
+            {tCommon('errorPrefix', { message: error })}
+          </p>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-4 py-2">Datei</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2 text-right">Chunks</th>
-              <th className="px-4 py-2">Hochgeladen</th>
+              <th className="px-4 py-2">{t('tableFile')}</th>
+              <th className="px-4 py-2">{t('tableStatus')}</th>
+              <th className="px-4 py-2 text-right">{t('tableChunks')}</th>
+              <th className="px-4 py-2">{t('tableUploadedAt')}</th>
             </tr>
           </thead>
           <tbody>
             {sources.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
-                  Noch nichts hochgeladen.
+                  {t('emptyState')}
                 </td>
               </tr>
             ) : (
@@ -127,12 +128,12 @@ export default function KnowledgePage() {
                     <span
                       className={`text-xs px-2 py-1 rounded ${STATUS_COLOR[s.status]}`}
                     >
-                      {STATUS_LABEL[s.status]}
+                      {statusLabel[s.status]}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{s.chunkCount}</td>
                   <td className="px-4 py-3 text-slate-500">
-                    {new Date(s.createdAt).toLocaleString('de-DE')}
+                    {new Date(s.createdAt).toLocaleString(dateLocale)}
                   </td>
                 </tr>
               ))

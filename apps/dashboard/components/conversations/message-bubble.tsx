@@ -1,13 +1,17 @@
 'use client';
 
+import { useLocale, useTranslations } from 'next-intl';
 import type { ConversationMessageItem } from '@avatardesk/shared';
 
 const VISION_PREFIX = '[analyze_screen]';
 const RAG_PREFIX = '[search_knowledge_base]';
 
 export function MessageBubble({ message }: { message: ConversationMessageItem }) {
+  const locale = useLocale();
+  const timeLocale = locale === 'en' ? 'en-US' : 'de-DE';
+
   if (message.role === 'system') return null;
-  if (message.role === 'tool') return <ToolRow message={message} />;
+  if (message.role === 'tool') return <ToolRow message={message} timeLocale={timeLocale} />;
 
   const isUser = message.role === 'user';
   return (
@@ -25,25 +29,32 @@ export function MessageBubble({ message }: { message: ConversationMessageItem })
             isUser ? 'text-slate-300' : 'text-slate-400'
           }`}
         >
-          {formatTime(message.timestamp)}
+          {formatTime(message.timestamp, timeLocale)}
         </p>
       </div>
     </div>
   );
 }
 
-function ToolRow({ message }: { message: ConversationMessageItem }) {
+function ToolRow({
+  message,
+  timeLocale,
+}: {
+  message: ConversationMessageItem;
+  timeLocale: string;
+}) {
+  const t = useTranslations('conversations');
   const content = message.content;
-  let label = 'Tool';
+  let label = t('toolGeneric');
   let preview = content;
   let icon = '⚙';
 
   if (content.startsWith(VISION_PREFIX)) {
-    label = 'Bildschirm analysiert';
+    label = t('toolVision');
     preview = content.slice(VISION_PREFIX.length).trim();
     icon = '👁';
   } else if (content.startsWith(RAG_PREFIX)) {
-    label = 'Wissensdatenbank durchsucht';
+    label = t('toolRag');
     preview = content.slice(RAG_PREFIX.length).trim();
     icon = '📚';
   }
@@ -56,14 +67,14 @@ function ToolRow({ message }: { message: ConversationMessageItem }) {
         <span aria-hidden>{icon}</span>
         <span>{label}</span>
         <span className="text-slate-300">·</span>
-        <span className="text-slate-400">{formatTime(message.timestamp)}</span>
+        <span className="text-slate-400">{formatTime(message.timestamp, timeLocale)}</span>
       </div>
     </div>
   );
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', {
+function formatTime(iso: string, timeLocale: string): string {
+  return new Date(iso).toLocaleTimeString(timeLocale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

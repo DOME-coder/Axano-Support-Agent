@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocale, useTranslations } from 'next-intl';
 import type { ConversationListItem } from '@avatardesk/shared';
 import { fetchConversations } from '@/lib/conversations-api';
 import { DashboardShell } from '@/components/dashboard-shell';
@@ -10,6 +11,7 @@ import { DashboardShell } from '@/components/dashboard-shell';
 const PAGE_SIZE = 20;
 
 export default function ConversationsPage() {
+  const t = useTranslations('conversations');
   const [page, setPage] = useState(1);
 
   const listQuery = useQuery({
@@ -22,21 +24,18 @@ export default function ConversationsPage() {
     <DashboardShell>
       <div className="space-y-6">
         <header className="space-y-1">
-          <h2 className="text-xl font-semibold">Konversationen</h2>
-          <p className="text-sm text-slate-500">
-            Alle Gespräche, die deine Endkunden mit Sofia geführt haben.
-            Klick auf eine Zeile, um das Transkript zu sehen.
-          </p>
+          <h2 className="text-xl font-semibold">{t('title')}</h2>
+          <p className="text-sm text-slate-500">{t('subtitle')}</p>
         </header>
 
         {listQuery.isLoading ? (
-          <SkeletonTable />
+          <SkeletonTable label={t('loading')} />
         ) : listQuery.isError ? (
           <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Konversationen konnten nicht geladen werden.
+            {t('loadError')}
           </div>
         ) : !listQuery.data || listQuery.data.items.length === 0 ? (
-          <EmptyState />
+          <EmptyState title={t('emptyTitle')} body={t('emptyBody')} />
         ) : (
           <>
             <ConversationsTable items={listQuery.data.items} />
@@ -54,18 +53,22 @@ export default function ConversationsPage() {
 }
 
 function ConversationsTable({ items }: { items: ConversationListItem[] }) {
+  const t = useTranslations('conversations');
+  const locale = useLocale();
+  const dateLocale = locale === 'en' ? 'en-US' : 'de-DE';
+
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="px-4 py-2 font-medium">Datum</th>
-            <th className="px-4 py-2 font-medium">Dauer</th>
-            <th className="px-4 py-2 font-medium">Sprache</th>
-            <th className="px-4 py-2 font-medium text-right">Messages</th>
-            <th className="px-4 py-2 font-medium text-right">BP-Min</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-            <th className="px-4 py-2 font-medium">CSAT</th>
+            <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+            <th className="px-4 py-2 font-medium">{t('tableDuration')}</th>
+            <th className="px-4 py-2 font-medium">{t('tableLanguage')}</th>
+            <th className="px-4 py-2 font-medium text-right">{t('tableMessages')}</th>
+            <th className="px-4 py-2 font-medium text-right">{t('tableBpMin')}</th>
+            <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
+            <th className="px-4 py-2 font-medium">{t('tableCsat')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -83,14 +86,14 @@ function ConversationsTable({ items }: { items: ConversationListItem[] }) {
                   className="text-ink hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {formatDate(item.startedAt)}
+                  {formatDate(item.startedAt, dateLocale)}
                 </Link>
                 {item.hasVision && (
                   <span
-                    title="Bildschirm wurde analysiert"
+                    title={t('visionTitle')}
                     className="ml-2 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500"
                   >
-                    Vision
+                    {t('visionBadge')}
                   </span>
                 )}
               </td>
@@ -121,21 +124,30 @@ function ConversationsTable({ items }: { items: ConversationListItem[] }) {
 }
 
 function ResolutionBadge({ resolution }: { resolution: ConversationListItem['resolution'] }) {
-  const map: Record<ConversationListItem['resolution'], { label: string; cls: string }> = {
-    pending: { label: 'läuft', cls: 'bg-blue-50 text-blue-700' },
-    resolved: { label: 'gelöst', cls: 'bg-green-50 text-green-700' },
-    escalated: { label: 'eskaliert', cls: 'bg-amber-50 text-amber-700' },
-    abandoned: { label: 'abgebrochen', cls: 'bg-slate-100 text-slate-500' },
+  const t = useTranslations('conversations');
+  const labels: Record<ConversationListItem['resolution'], string> = {
+    pending: t('resolutionPending'),
+    resolved: t('resolutionResolved'),
+    escalated: t('resolutionEscalated'),
+    abandoned: t('resolutionAbandoned'),
   };
-  const { label, cls } = map[resolution];
+  const styles: Record<ConversationListItem['resolution'], string> = {
+    pending: 'bg-blue-50 text-blue-700',
+    resolved: 'bg-green-50 text-green-700',
+    escalated: 'bg-amber-50 text-amber-700',
+    abandoned: 'bg-slate-100 text-slate-500',
+  };
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs ${cls}`}>{label}</span>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs ${styles[resolution]}`}>
+      {labels[resolution]}
+    </span>
   );
 }
 
 function Stars({ score }: { score: number }) {
+  const t = useTranslations('conversations');
   return (
-    <span aria-label={`${score} von 5 Sternen`} className="text-amber-500">
+    <span aria-label={t('starsAria', { score })} className="text-amber-500">
       {'★'.repeat(score)}
       <span className="text-slate-200">{'★'.repeat(5 - score)}</span>
     </span>
@@ -153,15 +165,14 @@ function Pagination({
   total: number;
   onPageChange: (p: number) => void;
 }) {
+  const t = useTranslations('conversations');
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   if (lastPage === 1) return null;
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   return (
     <div className="flex items-center justify-between text-sm text-slate-500">
-      <div>
-        {from}–{to} von {total}
-      </div>
+      <div>{t('pageOf', { from, to, total })}</div>
       <div className="flex gap-2">
         <button
           type="button"
@@ -169,7 +180,7 @@ function Pagination({
           disabled={page <= 1}
           className="rounded border border-slate-200 px-3 py-1 disabled:opacity-40"
         >
-          Zurück
+          {t('back')}
         </button>
         <button
           type="button"
@@ -177,35 +188,33 @@ function Pagination({
           disabled={page >= lastPage}
           className="rounded border border-slate-200 px-3 py-1 disabled:opacity-40"
         >
-          Weiter
+          {t('next')}
         </button>
       </div>
     </div>
   );
 }
 
-function SkeletonTable() {
+function SkeletonTable({ label }: { label: string }) {
   return (
     <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-400">
-      Lädt Konversationen…
+      {label}
     </div>
   );
 }
 
-function EmptyState() {
+function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="rounded border border-dashed border-slate-300 bg-white p-12 text-center">
-      <p className="text-sm text-slate-600">Noch keine Konversationen.</p>
-      <p className="mt-1 text-xs text-slate-400">
-        Sobald deine Endkunden mit Sofia sprechen, erscheinen sie hier.
-      </p>
+      <p className="text-sm text-slate-600">{title}</p>
+      <p className="mt-1 text-xs text-slate-400">{body}</p>
     </div>
   );
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, dateLocale: string): string {
   const d = new Date(iso);
-  return d.toLocaleString('de-DE', {
+  return d.toLocaleString(dateLocale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

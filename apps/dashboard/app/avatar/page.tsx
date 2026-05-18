@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslations } from 'next-intl';
 import { avatarConfigPatchSchema, type AvatarConfigPatch } from '@avatardesk/shared';
 import {
   fetchAvatarConfig,
@@ -12,8 +13,16 @@ import { DashboardShell } from '@/components/dashboard-shell';
 
 type FieldErrors = Partial<Record<keyof AvatarConfigPatch, string>>;
 
+// Dashboard exposes only the languages the agent + widget actually
+// localize. Backend still accepts the wider LANGUAGE_CODES set so a
+// future expansion doesn't require a schema change — the gate sits
+// here in the UI.
+const DASHBOARD_LANGUAGES = ['de', 'en'] as const;
+
 export default function AvatarPage() {
   const queryClient = useQueryClient();
+  const t = useTranslations('avatar');
+  const tCommon = useTranslations('common');
 
   const configQuery = useQuery({
     queryKey: ['avatar-config'],
@@ -53,10 +62,6 @@ export default function AvatarPage() {
     mutationFn: updateAvatarConfig,
     onSuccess: (data) => {
       queryClient.setQueryData(['avatar-config'], data);
-      // Re-sync the local form from the authoritative server response
-      // so any server-side normalization (trim, voice-id remap, ...)
-      // is visible to the user. The initial-fill useEffect above is
-      // guarded by `!form` and won't run again on its own.
       setForm({
         beyAvatarId: data.beyAvatarId,
         elevenlabsVoiceId: data.elevenlabsVoiceId,
@@ -97,133 +102,136 @@ export default function AvatarPage() {
   }
 
   const ready = !!form && optionsQuery.data;
+  const availableLanguages = (optionsQuery.data?.languages ?? []).filter((l) =>
+    (DASHBOARD_LANGUAGES as readonly string[]).includes(l),
+  );
 
   return (
     <DashboardShell>
-        <h2 className="text-xl font-semibold mb-2">Avatar-Konfiguration</h2>
-        <p className="text-sm text-slate-500 mb-6">
-          Änderungen greifen ab der nächsten Konversation — kein Neustart nötig.
-        </p>
+      <h2 className="text-xl font-semibold mb-2">{t('title')}</h2>
+      <p className="text-sm text-slate-500 mb-6">{t('subtitle')}</p>
 
-        {!ready ? (
-          <p className="text-sm text-slate-500">Konfiguration lädt…</p>
-        ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-6 bg-white border border-slate-200 rounded-2xl p-6"
+      {!ready ? (
+        <p className="text-sm text-slate-500">{tCommon('loading')}</p>
+      ) : (
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6 bg-white border border-slate-200 rounded-2xl p-6"
+        >
+          <Field
+            label={t('avatarLabel')}
+            hint={t('avatarHint')}
+            error={fieldErrors.beyAvatarId}
           >
-            <Field
-              label="Avatar"
-              hint="Beyond-Presence-Avatar-ID. Auswahl aus kuratierter Liste oder eigene ID eintragen."
-              error={fieldErrors.beyAvatarId}
-            >
-              <SelectWithCustom
-                value={form!.beyAvatarId}
-                options={optionsQuery.data!.avatars}
-                onChange={(v) => update('beyAvatarId', v)}
-              />
-            </Field>
+            <SelectWithCustom
+              value={form!.beyAvatarId}
+              options={optionsQuery.data!.avatars}
+              onChange={(v) => update('beyAvatarId', v)}
+              presetLabel={t('selectPreset')}
+              customLabel={t('selectCustom')}
+              placeholder={t('selectPlaceholder')}
+              customPlaceholder={t('selectCustomPlaceholder')}
+            />
+          </Field>
 
-            <Field
-              label="Stimme"
-              hint="ElevenLabs-Voice-ID."
-              error={fieldErrors.elevenlabsVoiceId}
-            >
-              <SelectWithCustom
-                value={form!.elevenlabsVoiceId}
-                options={optionsQuery.data!.voices}
-                onChange={(v) => update('elevenlabsVoiceId', v)}
-              />
-            </Field>
+          <Field
+            label={t('voiceLabel')}
+            hint={t('voiceHint')}
+            error={fieldErrors.elevenlabsVoiceId}
+          >
+            <SelectWithCustom
+              value={form!.elevenlabsVoiceId}
+              options={optionsQuery.data!.voices}
+              onChange={(v) => update('elevenlabsVoiceId', v)}
+              presetLabel={t('selectPreset')}
+              customLabel={t('selectCustom')}
+              placeholder={t('selectPlaceholder')}
+              customPlaceholder={t('selectCustomPlaceholder')}
+            />
+          </Field>
 
-            <Field
-              label="Sprache"
-              hint="ISO-Code der Konversationssprache."
-              error={fieldErrors.language}
+          <Field
+            label={t('languageLabel')}
+            hint={t('languageHint')}
+            error={fieldErrors.language}
+          >
+            <select
+              value={form!.language}
+              onChange={(e) =>
+                update('language', e.currentTarget.value as AvatarConfigPatch['language'])
+              }
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
             >
-              <select
-                value={form!.language}
-                onChange={(e) =>
-                  update('language', e.currentTarget.value as AvatarConfigPatch['language'])
-                }
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-              >
-                {optionsQuery.data!.languages.map((lang) => (
-                  <option key={lang} value={lang}>
-                    {lang.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </Field>
+              {availableLanguages.map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-            <Field
-              label="Persona-Prompt"
-              hint="System-Anweisung an das LLM. Tonalität, Anrede, Verhalten."
-              error={fieldErrors.personaPrompt}
-            >
-              <textarea
-                value={form!.personaPrompt}
-                onChange={(e) => update('personaPrompt', e.currentTarget.value)}
-                rows={6}
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 font-mono text-sm"
-              />
-            </Field>
+          <Field
+            label={t('personaLabel')}
+            hint={t('personaHint')}
+            error={fieldErrors.personaPrompt}
+          >
+            <textarea
+              value={form!.personaPrompt}
+              onChange={(e) => update('personaPrompt', e.currentTarget.value)}
+              rows={6}
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 font-mono text-sm"
+            />
+          </Field>
 
-            <Field
-              label="Begrüßungstext"
-              hint="Erster Satz, den der Avatar beim Modal-Öffnen sagt."
-              error={fieldErrors.greeting}
-            >
+          <Field
+            label={t('greetingLabel')}
+            hint={t('greetingHint')}
+            error={fieldErrors.greeting}
+          >
+            <input
+              type="text"
+              value={form!.greeting}
+              onChange={(e) => update('greeting', e.currentTarget.value)}
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            />
+          </Field>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
-                type="text"
-                value={form!.greeting}
-                onChange={(e) => update('greeting', e.currentTarget.value)}
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                type="checkbox"
+                checked={form!.allowScreenShare}
+                onChange={(e) => update('allowScreenShare', e.currentTarget.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300"
               />
-            </Field>
-
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form!.allowScreenShare}
-                  onChange={(e) => update('allowScreenShare', e.currentTarget.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300"
-                />
-                <span className="text-sm">
-                  <span className="block font-medium text-slate-800">
-                    Bildschirm-Sharing erlauben
-                  </span>
-                  <span className="block text-xs text-slate-600 mt-1">
-                    Endkunden können ihren Bildschirm teilen; der Avatar
-                    erkennt sichtbare UI-Elemente und gibt Klick-für-Klick-
-                    Hilfe. Frames werden an einen LLM-Anbieter (Anthropic)
-                    gesendet und nicht persistiert. Aktiviere diese Option
-                    nur, wenn deine Endkunden-Kontexte keine sensiblen
-                    Daten (Banking, Health, PII) enthalten können. Pro
-                    Session gibt der Endkunde zusätzlich aktive Einwilligung.
-                  </span>
+              <span className="text-sm">
+                <span className="block font-medium text-slate-800">
+                  {t('screenShareTitle')}
                 </span>
-              </label>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={mutation.isPending}
-                className="rounded-lg bg-ink text-white px-4 py-2 font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                {mutation.isPending ? 'Speichere…' : 'Speichern'}
-              </button>
-              {savedAt && <span className="text-sm text-emerald-600">Gespeichert.</span>}
-              {mutation.isError && (
-                <span className="text-sm text-red-600">
-                  Fehler: {(mutation.error as Error).message}
+                <span className="block text-xs text-slate-600 mt-1">
+                  {t('screenShareBody')}
                 </span>
-              )}
-            </div>
-          </form>
-        )}
+              </span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="rounded-lg bg-ink text-white px-4 py-2 font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {mutation.isPending ? tCommon('saving') : tCommon('save')}
+            </button>
+            {savedAt && <span className="text-sm text-emerald-600">{tCommon('saved')}</span>}
+            {mutation.isError && (
+              <span className="text-sm text-red-600">
+                {tCommon('errorPrefix', { message: (mutation.error as Error).message })}
+              </span>
+            )}
+          </div>
+        </form>
+      )}
     </DashboardShell>
   );
 }
@@ -253,10 +261,18 @@ function SelectWithCustom({
   value,
   options,
   onChange,
+  presetLabel,
+  customLabel,
+  placeholder,
+  customPlaceholder,
 }: {
   value: string;
   options: ReadonlyArray<{ id: string; label: string; hint?: string }>;
   onChange: (v: string) => void;
+  presetLabel: string;
+  customLabel: string;
+  placeholder: string;
+  customPlaceholder: string;
 }) {
   const isPreset = options.some((o) => o.id === value);
   const [mode, setMode] = useState<'preset' | 'custom'>(isPreset ? 'preset' : 'custom');
@@ -271,7 +287,7 @@ function SelectWithCustom({
             mode === 'preset' ? 'bg-slate-100 text-ink' : 'text-slate-500'
           }`}
         >
-          Auswählen
+          {presetLabel}
         </button>
         <button
           type="button"
@@ -280,7 +296,7 @@ function SelectWithCustom({
             mode === 'custom' ? 'bg-slate-100 text-ink' : 'text-slate-500'
           }`}
         >
-          Eigene ID
+          {customLabel}
         </button>
       </div>
       {mode === 'preset' ? (
@@ -289,7 +305,7 @@ function SelectWithCustom({
           onChange={(e) => onChange(e.currentTarget.value)}
           className="block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
         >
-          {!isPreset && <option value="">— wählen —</option>}
+          {!isPreset && <option value="">{placeholder}</option>}
           {options.map((o) => (
             <option key={o.id} value={o.id} title={o.hint}>
               {o.label}
@@ -301,7 +317,7 @@ function SelectWithCustom({
           type="text"
           value={value}
           onChange={(e) => onChange(e.currentTarget.value)}
-          placeholder="ID eintragen"
+          placeholder={customPlaceholder}
           className="block w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
         />
       )}
