@@ -90,6 +90,16 @@ RAG_GROUNDING_HINT = (
 # match user phrasing without us having to enumerate every variation.
 # The tool itself returns an honest "no share" message when redis is
 # empty, so the LLM is allowed to call it even on ambiguous prompts.
+ESCALATION_HINT = (
+    "\n\nWICHTIG: Wenn du dem Endkunden trotz mehrfacher Versuche "
+    "(etwa drei Anläufe) nicht helfen konntest, oder wenn der Endkunde "
+    "ausdrücklich nach einem echten Menschen / Mitarbeiter / Berater "
+    "fragt, rufst du das Tool `escalate_to_human` mit einer kurzen "
+    "deutschen Begründung auf (max. zwei Sätze, beschreibe was der "
+    "Endkunde wollte und warum du nicht weiterhelfen konntest). Bestätige "
+    "dem Endkunden anschließend kurz, dass sich jemand bei ihm melden wird."
+)
+
 SCREEN_VISION_HINT = (
     "\n\nWICHTIG: Wenn der Endkunde nach etwas Visuellem auf seinem "
     "Bildschirm fragt — z. B. 'wo finde ich…', 'wie klicke ich…', 'was "
@@ -178,6 +188,11 @@ class ConversationalAgent(Agent):
                 )
             )
             full_instructions = full_instructions + SCREEN_VISION_HINT
+        if conversation_id and api_client:
+            tools.append(
+                self._build_escalate_tool(conversation_id, api_client)
+            )
+            full_instructions = full_instructions + ESCALATION_HINT
         super().__init__(instructions=full_instructions, tools=tools)
 
     @staticmethod
@@ -264,6 +279,47 @@ class ConversationalAgent(Agent):
             return snapshot
 
         return analyze_screen
+
+
+    @staticmethod
+    def _build_escalate_tool(
+        conversation_id: str,
+        api_client: ApiClient,
+    ):
+        log = structlog.get_logger(__name__)
+
+        @function_tool(
+            name="escalate_to_human",
+            description=(
+                "Eskaliert die laufende Konversation an einen menschlichen "
+                "Mitarbeiter. Nutze dieses Tool, wenn du dem Endkunden "
+                "nicht weiterhelfen konntest oder er ausdrücklich nach "
+                "einem Menschen fragt. Übergib eine kurze deutsche "
+                "Begründung (max. zwei Sätze) — sie hilft dem Kollegen "
+                "beim Übernehmen."
+            ),
+        )
+        async def escalate_to_human(reason: str) -> str:
+            cleaned = reason.strip() or "Endkunde benötigt menschliche Unterstützung."
+            log.info("escalate_to_human called", reason_chars=len(cleaned))
+            ok = await api_client.escalate(conversation_id, cleaned)
+            if ok:
+                result = (
+                    "Ich habe einen menschlichen Kollegen informiert. Er wird "
+                    "sich in Kürze bei dir melden."
+                )
+            else:
+                # Don't lie if the API call failed — but stay calm so the
+                # LLM can apologize without dramatizing the outage.
+                result = (
+                    "Die Weiterleitung an einen menschlichen Kollegen ist "
+                    "gerade nicht möglich. Bitte versuche es in Kürze "
+                    "erneut oder kontaktiere uns direkt."
+                )
+            _log_tool_call(api_client, conversation_id, "escalate_to_human", cleaned, result)
+            return result
+
+        return escalate_to_human
 
 
 def _extract_conversation_id(room_metadata: str | None) -> str | None:

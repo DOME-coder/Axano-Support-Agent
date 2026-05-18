@@ -137,6 +137,25 @@ class ApiClient:
             )
         return hits
 
+    async def escalate(
+        self,
+        conversation_id: str,
+        reason: str,
+        target: str = "email",
+    ) -> bool:
+        """Fire-and-forget escalation. Returns True if the API row was
+        created. Failures are logged but never raised — the LLM-facing
+        tool always returns its own confirmation text either way."""
+        url = f"{self._base_url}/api/internal/conversations/{conversation_id}/escalate"
+        payload: dict[str, Any] = {"reason": reason, "target": target}
+        try:
+            response = await self._client.post(url, json=payload)
+            response.raise_for_status()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("failed to escalate", error=str(exc))
+            return False
+
     async def patch_conversation(
         self,
         conversation_id: str,
