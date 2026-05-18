@@ -54,9 +54,14 @@ function ConversationView({ detail }: { detail: ConversationDetail }) {
           <Metric label="Sprache" value={detail.language.toUpperCase()} />
           <Metric label="Messages" value={String(detail.messageCount)} />
           <Metric label="BP-Min" value={formatMinutes(detail.beyMinutesUsed)} />
-          <Metric label="CSAT" value={detail.csatScore == null ? '—' : `${detail.csatScore}/5`} />
+          <CsatMetric score={detail.csatScore} />
           <ResolutionBadge resolution={detail.resolution} />
         </div>
+        {detail.csatComment && (
+          <blockquote className="mt-3 border-l-2 border-amber-300 pl-3 text-sm italic text-slate-600">
+            „{detail.csatComment}"
+          </blockquote>
+        )}
         {isActive && (
           <p className="mt-3 text-xs text-amber-600">
             Diese Konversation läuft gerade noch — das Transkript wird mit
@@ -64,6 +69,8 @@ function ConversationView({ detail }: { detail: ConversationDetail }) {
           </p>
         )}
       </header>
+
+      {detail.escalation && <EscalationBanner escalation={detail.escalation} />}
 
       <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-4">
         {detail.messages.length === 0 ? (
@@ -75,6 +82,52 @@ function ConversationView({ detail }: { detail: ConversationDetail }) {
         )}
       </div>
     </>
+  );
+}
+
+function CsatMetric({ score }: { score: number | null }) {
+  if (score == null) {
+    return <Metric label="CSAT" value="—" />;
+  }
+  return (
+    <div className="text-sm">
+      <span className="text-slate-400">CSAT:</span>{' '}
+      <span className="text-amber-500" aria-label={`${score} von 5 Sternen`}>
+        {'★'.repeat(score)}
+        <span className="text-slate-200">{'★'.repeat(5 - score)}</span>
+      </span>
+    </div>
+  );
+}
+
+function EscalationBanner({
+  escalation,
+}: {
+  escalation: NonNullable<ConversationDetail['escalation']>;
+}) {
+  return (
+    <div
+      role="alert"
+      className="rounded border border-amber-300 bg-amber-50 p-4"
+    >
+      <div className="flex items-start gap-3">
+        <span aria-hidden className="text-lg leading-none">⚠</span>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-amber-900">
+            An menschlichen Kollegen eskaliert
+            {escalation.status === 'resolved' && (
+              <span className="ml-2 text-xs font-normal text-amber-700">
+                (bereits bearbeitet)
+              </span>
+            )}
+          </p>
+          <p className="text-sm text-amber-800">{escalation.reason}</p>
+          <p className="text-xs text-amber-700">
+            {formatDate(escalation.createdAt)} · Ziel: {escalation.target}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
