@@ -13,7 +13,7 @@ import {
 import { eq } from 'drizzle-orm';
 import { InternalServiceGuard } from '../auth/internal-service.guard';
 import { DRIZZLE_DB, type DrizzleDB } from '../db/db.module';
-import { avatarConfigs, conversations, messages } from '../db/schema';
+import { avatarConfigs, conversations, escalations, messages } from '../db/schema';
 
 interface AgentConfigResponse {
   conversationId: string;
@@ -35,6 +35,11 @@ interface PatchConversationBody {
   endedAt?: string;
   resolution?: 'pending' | 'resolved' | 'escalated' | 'abandoned';
   beyMinutesUsed?: number;
+}
+
+interface EscalateBody {
+  reason: string;
+  target?: 'email' | 'human-agent';
 }
 
 @Controller('api/internal/conversations')
@@ -103,5 +108,41 @@ export class InternalConversationsController {
     }
     await this.db.update(conversations).set(update).where(eq(conversations.id, id));
     return { ok: true };
+  }
+
+  @Post(':id/escalate')
+  async escalate(
+    @Param('id') id: string,
+    @Body() body: EscalateBody,
+  ): Promise<{ ok: true; escalationId: string }> {
+    const reason = (body.reason ?? '').trim();
+    if (!reason) {
+      throw new HttpException('reason is required', HttpStatus.BAD_REQUEST);
+    }
+    const target = body.target ?? 'email';
+    // We don't 404 a missing conversation here — the agent calls this
+    // from inside an active conversation, so the id is trusted. A
+    // foreign id would just fail the FK constraint below, which is
+    // good enough audit.
+    const inserted = await this.db
+      .insert(escalations)
+      .values({
+        conversationId: id,
+        reason: reason.slice(0, 2000),
+        target,
+        status: 'pending',
+      })
+      .returning({ id: escalations.id });
+    const row = inserted[0];
+    if (!row) {
+      throw new HttpException('failed to insert escalation', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    await this.db
+      .update(conversations)
+      .set({ resolution: 'escalated' })
+      .where(eq(conversations.id, id));
+
+    return { ok: true, escalationId: row.id };
   }
 }

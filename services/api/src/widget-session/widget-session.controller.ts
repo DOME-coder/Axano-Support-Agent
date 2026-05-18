@@ -5,11 +5,13 @@ import {
   HttpStatus,
   Inject,
   Logger,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import {
   CONVERSATION_RESUME_TTL_MS,
+  csatSubmissionSchema,
   type CreateWidgetSessionBody,
   type WidgetSessionResponse,
 } from '@avatardesk/shared';
@@ -127,6 +129,62 @@ export class WidgetSessionController {
         allowScreenShare: config.allowScreenShare,
       },
     };
+  }
+
+  @Post(':conversationId/csat')
+  async submitCsat(
+    @CurrentTenant() tenant: Tenant,
+    @Param('conversationId') conversationId: string,
+    @Body() body: unknown,
+  ): Promise<{ ok: true }> {
+    const parsed = csatSubmissionSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new HttpException(
+        `invalid csat body: ${parsed.error.message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const { score, comment } = parsed.data;
+
+    // Cross-tenant probe lands here: a conversation that doesn't belong
+    // to the calling tenant is indistinguishable from one that doesn't
+    // exist. 404 in both cases keeps us from leaking existence.
+    const rows = await this.db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.tenantId, tenant.id),
+        ),
+      )
+      .limit(1);
+    const conversation = rows[0];
+    if (!conversation) {
+      throw new HttpException('conversation not found', HttpStatus.NOT_FOUND);
+    }
+
+    const update: Record<string, unknown> = {
+      csatScore: score,
+      csatComment: comment ?? null,
+    };
+    // Only flip resolution if it's still pending — an escalation that
+    // already fired must not be downgraded to 'abandoned' by a low
+    // CSAT (and a tenant who manually resolved earlier shouldn't be
+    // overwritten either, once that ui exists in phase 3).
+    if (conversation.resolution === 'pending') {
+      update.resolution = score >= 4 ? 'resolved' : 'abandoned';
+      update.endedAt = new Date();
+    }
+    await this.db
+      .update(conversations)
+      .set(update)
+      .where(eq(conversations.id, conversationId));
+
+    this.logger.log(
+      `csat submitted: conversation=${conversationId} score=${score} commentLen=${comment?.length ?? 0}`,
+    );
+    return { ok: true };
   }
 
   private async tryResumeConversation(
